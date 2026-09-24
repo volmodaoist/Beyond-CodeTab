@@ -10,7 +10,8 @@ const options = {
   entryPoints: ["src/main.ts"],
   outfile: "dist/main.js",
   bundle: true,
-  external: ["obsidian"],
+  // 与 Obsidian 共享 CodeMirror 实例，避免重复打包后扩展对象无法被宿主识别。
+  external: ["obsidian", "@codemirror/state", "@codemirror/view"],
   format: "cjs",
   platform: "browser",
   target: "es2019",

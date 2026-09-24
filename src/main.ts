@@ -1,4 +1,5 @@
 import { MarkdownRenderChild, Plugin } from "obsidian";
+import type { Command } from "obsidian";
 import { renderTabGroup } from "./components/tabGroup";
 
 /**
@@ -26,7 +27,7 @@ export default class CodeTabPlugin extends Plugin {
       renderTabGroup(this, component, element, context, source);
     });
 
-    this.addCommand({
+    const createTabCommand: Command = {
       id: "create-tab",
       name: "创建标签组件",
       editorCallback: (editor) => {
@@ -43,7 +44,9 @@ export default class CodeTabPlugin extends Plugin {
         ].join("\n");
         editor.replaceSelection(template);
       },
-    });
+    };
+
+    this.addCommand(createTabCommand);
   }
 
   onunload() {

@@ -1,9 +1,13 @@
 .code-tab {
     --code-tab-accent: var(--interactive-accent);
+    /* 预览与编辑共享这些尺寸，避免切换时圆角、文字位置和留白发生变化。 */
+    --code-tab-radius: 4px;
+    --code-tab-panel-padding: 1.15rem 1.25rem;
+    --code-tab-code-padding: 1.15rem 1.35rem;
     margin-block: 1.25em;
     overflow: hidden;
     border: 1px solid var(--background-modifier-border);
-    border-radius: var(--radius-l, 12px);
+    border-radius: var(--code-tab-radius);
     background: var(--background-primary);
     box-shadow: none !important;
 }
@@ -92,8 +96,10 @@
 }
 
 .code-tab__panel {
+    box-sizing: border-box;
+    min-width: 0;
     min-height: 5rem;
-    padding: 1.15rem 1.25rem;
+    padding: var(--code-tab-panel-padding);
     color: var(--text-normal);
     cursor: text;
 }
@@ -112,9 +118,9 @@
 
 .code-tab__panel pre {
     margin-block: 0 !important;
-    padding: 1.15rem 1.35rem;
+    padding: var(--code-tab-code-padding);
     border: 0;
-    border-radius: var(--radius-m, 8px);
+    border-radius: var(--code-tab-radius);
     background: var(--code-background);
     box-shadow: none;
 }
@@ -124,13 +130,29 @@
 }
 
 .code-tab__panel.is-editing {
-    padding: 0;
-    background: var(--code-background);
+    /* 高度在进入编辑前测量。保留预览态的 padding 和背景，只有内部编辑器滚动。 */
+    height: var(--code-tab-editor-height);
+    min-height: 0;
+    overflow: hidden;
 }
 
 .code-tab__native-editor {
-    min-height: 8rem;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
     overflow: hidden;
+    border-radius: var(--code-tab-radius);
+    background: var(--code-background);
+}
+
+/* 宿主可能把 markdown-embed 类直接加到 editorHost 上；去掉引用线，保留代码框背景。 */
+.code-tab__native-editor.markdown-embed {
+    border: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: var(--code-tab-radius);
     background: var(--code-background);
 }
 
@@ -140,7 +162,9 @@
 .code-tab__native-editor .markdown-source-view,
 .code-tab__native-editor .cm-editor,
 .code-tab__native-editor .cm-scroller {
-    min-height: inherit;
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
     border: 0 !important;
@@ -150,13 +174,21 @@
 }
 
 .code-tab__native-editor .markdown-embed,
-.code-tab__native-editor .markdown-embed-content {
+.code-tab__native-editor .markdown-embed-content,
+.code-tab__native-editor .markdown-source-view,
+.code-tab__native-editor .cm-editor,
+.code-tab__native-editor .cm-scroller {
     width: 100%;
-    max-height: none !important;
+    height: 100% !important;
+    max-height: 100%;
+    overflow: hidden;
 }
 
-.code-tab__native-editor .markdown-source-view {
-    height: auto !important;
+.code-tab__native-editor .cm-scroller {
+    /* 将滚动限制在固定视口内；滚动条不预留宽度，避免正文横向位移。 */
+    overflow: auto;
+    scrollbar-gutter: auto;
+    scrollbar-width: thin;
 }
 
 .code-tab__native-editor .markdown-embed-title,
@@ -166,17 +198,33 @@
     display: none !important;
 }
 
+.code-tab__native-editor .cm-sizer {
+    /* Obsidian 会以内联样式给整页编辑器添加上下留白，短代码块不需要这些空间。 */
+    min-height: 100% !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
 .code-tab__native-editor .cm-contentContainer {
     padding: 0 !important;
 }
 
 .code-tab__native-editor .cm-content {
-    min-height: 8rem;
-    padding: 1.15rem 1.35rem !important;
+    min-height: 0 !important;
+    max-width: none !important;
+    padding: var(--code-tab-code-padding) !important;
     font-family: var(--font-monospace);
     font-size: var(--code-size);
     line-height: 1.7;
     caret-color: var(--text-accent);
+}
+
+.code-tab__native-editor .cm-line {
+    /* 行内代码块原有的左缩进与 cm-content 的 padding 重复，只保留一层。 */
+    padding-inline: 0 !important;
+    max-width: none !important;
 }
 
 .code-tab__native-editor .cm-gutters {
@@ -191,12 +239,14 @@
     display: block;
     box-sizing: border-box;
     width: 100%;
-    min-height: 8rem;
-    resize: vertical;
+    height: 100%;
+    min-height: 0;
+    resize: none;
+    overflow: auto;
     margin: 0;
-    padding: 1.15rem 1.35rem;
+    padding: var(--code-tab-code-padding);
     border: 0;
-    border-radius: 0;
+    border-radius: var(--code-tab-radius);
     outline: 0;
     background: var(--code-background);
     color: var(--text-normal);
@@ -221,7 +271,7 @@
         padding-inline-start: 0.35rem;
     }
 
-    .code-tab__panel {
-        padding: 0.85rem;
+    .code-tab {
+        --code-tab-panel-padding: 0.85rem;
     }
 }

@@ -89,6 +89,57 @@ test("预览语言别名不改变用于保存的标签内容", () => {
   assert.equal(serializeTabs(tabs), source);
 });
 
+test("标签分组保留普通 Markdown、多个代码块及代码块之后的正文", () => {
+  const content = [
+    "## 示例", "", "这里是 **加粗文字**。", "", "- 第一项", "- 第二项", "",
+    backticks.repeat(3) + "python", 'print("hello")', backticks.repeat(3),
+    "", "代码后面的段落包含 tab:，但不是标签声明。", "",
+    "~~~text", "tab: 代码里的声明", "~~~", "", "> 引用内容",
+  ].join("\n");
+  assert.deepEqual(parseTabs("tab: 示例\n" + content + "\n\ntab: 说明\n最后一段"), [
+    { title: "示例", content },
+    { title: "说明", content: "最后一段" },
+  ]);
+});
+
+test("连续标签与末尾空标签不会因下标推进被跳过", () => {
+  assert.deepEqual(parseTabs("tab: 第一页\ntab: 第二页\n内容\ntab:"), [
+    { title: "第一页", content: "" },
+    { title: "第二页", content: "内容" },
+    { title: "标签3", content: "" },
+  ]);
+});
+
+for (const marker of [backticks, "~"]) {
+  test("标签分组正确识别带缩进且更长的结束围栏，标记为 " + marker, () => {
+    const otherMarker = marker === backticks ? "~" : backticks;
+    const code = [
+      "  " + marker.repeat(4) + "text",
+      otherMarker.repeat(4), "tab: 不同字符不能结束",
+      marker.repeat(3), "tab: 较短围栏不能结束",
+      marker.repeat(4) + "python", "tab: 带语言名不能结束",
+      "  " + marker.repeat(5) + "  ",
+    ].join("\n");
+    assert.deepEqual(parseTabs("tab: 示例\n" + code + "\ntab: 下一个\n正文"), [
+      { title: "示例", content: code },
+      { title: "下一个", content: "正文" },
+    ]);
+  });
+
+  test("未闭合围栏内的 tab: 保留到正文末尾，标记为 " + marker, () => {
+    const content = [marker.repeat(3) + "text", "正文", "tab: 仍然属于代码块"].join("\n");
+    assert.deepEqual(parseTabs("tab: 示例\n" + content), [{ title: "示例", content }]);
+  });
+
+  test("首个标签之前的代码块不产生标签，标记为 " + marker, () => {
+    const preamble = [marker.repeat(3) + "text", "tab: 代码中的声明"].join("\n");
+    assert.deepEqual(parseTabs(preamble), []);
+    assert.deepEqual(parseTabs(preamble + "\n" + marker.repeat(3) + "\ntab: 真正的标签\n正文"), [
+      { title: "真正的标签", content: "正文" },
+    ]);
+  });
+}
+
 for (const newline of ["\n", "\r\n"]) {
   test("多块保存只修改距离原行号最近的匹配块，保留 " + JSON.stringify(newline), async () => {
     const previous = "tab: 相同标题\n旧内容";
