@@ -97,8 +97,39 @@ export function codeBlockEditorExtensions(): Extension[] {
     EditorState.changeFilter.of((transaction) => {
       const body = findCodeBlockBody(transaction.startState.doc.toString());
       if (!body) return true;
+      // changeFilter 的数字区间只保护区间内部，0 和 doc.length 上的插入仍会通过。
+      // 宿主可能直接派发修改，因此除了约束选区，还必须拦住围栏内及文档两端的插入。
+      let insertsOutsideBody = false;
+      transaction.changes.iterChanges((from, to, _fromAfter, _toAfter, inserted) => {
+        if (inserted.length > 0 && (from < body.from || to > body.to)) {
+          insertsOutsideBody = true;
+        }
+      });
+      if (insertsOutsideBody) return false;
       return [0, body.from, body.to, transaction.startState.doc.length];
     }),
+    Prec.highest(EditorState.transactionFilter.of((transaction) => {
+      const body = findCodeBlockBody(transaction.newDoc.toString());
+      if (!body) return transaction;
+      const selection = transaction.newSelection;
+      if (selection.ranges.every((range) => range.from >= body.from && range.to <= body.to)) {
+        return transaction;
+      }
+
+      // atomicRanges 只负责跨过隐藏区域，不能阻止 Cmd+↓、鼠标或宿主命令选中文档末尾。
+      // 所有选区入口都在这里收束到正文；保留选择方向和主选区，兼容拖选、全选和多光标。
+      const clamp = (position: number) => Math.max(body.from, Math.min(position, body.to));
+      const ranges = selection.ranges.map((range) =>
+        EditorSelection.range(clamp(range.anchor), clamp(range.head))
+      );
+      const correction: TransactionSpec = {
+        selection: EditorSelection.create(ranges, selection.mainIndex),
+        sequential: true,
+      };
+
+      // correction 的坐标基于修改后的文档，sequential 避免粘贴后再次映射导致光标漂移。
+      return [transaction, correction];
+    })),
   ];
 
   return extensions;

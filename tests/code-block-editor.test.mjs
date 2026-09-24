@@ -79,3 +79,34 @@ test("正文两端退格不能合并隐藏的围栏行", () => {
     assert.equal(state.update({ changes }).state.doc.toString(), source);
   }
 });
+
+test("跳到文末后粘贴仍落在代码正文末尾", () => {
+  const source = ticks.repeat(3) + 'python\nprint("hello tab1")\n' + ticks.repeat(3);
+  let state = EditorState.create({ doc: source, extensions: codeBlockEditorExtensions() });
+  // 对应真实宿主的 Cmd+↓ / Ctrl+End，不能停在隐藏结束围栏的后面。
+  state = state.update({ selection: { anchor: state.doc.length } }).state;
+  assert.equal(state.selection.main.head, findCodeBlockBody(source).to);
+  state = state.update(state.replaceSelection('\nprint("hello")')).state;
+  assert.equal(state.doc.toString(), ticks.repeat(3) + 'python\nprint("hello tab1")\nprint("hello")\n' + ticks.repeat(3));
+});
+
+test("跳到文首和跨围栏选择均限定到可见正文", () => {
+  const source = ticks.repeat(3) + "python\nprint(1)\n" + ticks.repeat(3);
+  let state = EditorState.create({ doc: source, extensions: codeBlockEditorExtensions() });
+  state = state.update({ selection: { anchor: 0 } }).state;
+  assert.equal(state.selection.main.head, findCodeBlockBody(source).from);
+  state = state.update({ selection: { anchor: state.doc.length, head: 0 } }).state;
+  assert.equal(state.selection.main.anchor, findCodeBlockBody(source).to);
+  assert.equal(state.selection.main.head, findCodeBlockBody(source).from);
+  state = state.update(state.replaceSelection("替换内容")).state;
+  assert.equal(state.doc.toString(), ticks.repeat(3) + "python\n替换内容\n" + ticks.repeat(3));
+});
+
+test("宿主直接向文档两端插入内容也不能破坏围栏", () => {
+  const source = ticks.repeat(3) + "python\nprint(1)\n" + ticks.repeat(3);
+  const state = EditorState.create({ doc: source, extensions: codeBlockEditorExtensions() });
+  for (const from of [0, 3, state.doc.length - 1, state.doc.length]) {
+    const edited = state.update({ changes: { from, insert: "print(2)" } }).state;
+    assert.equal(edited.doc.toString(), source);
+  }
+});
