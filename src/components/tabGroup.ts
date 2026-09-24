@@ -134,7 +134,7 @@ export function renderTabGroup(
     };
 
     const destroyEditor = () => {
-      if (editorDom) editorDom.removeEventListener("keydown", handleEditorKeydown);
+      editorDom?.ownerDocument.defaultView?.removeEventListener("keydown", handleNativeKeydown, true);
       if (!editorView) return;
       try {
         // 动态创建的子组件必须及时卸载，避免关闭标签后仍保留编辑器监听器。
@@ -214,8 +214,14 @@ export function renderTabGroup(
       }
       if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
+        event.stopPropagation();
         save();
       }
+    }
+
+    function handleNativeKeydown(event: KeyboardEvent) {
+      // 监听虽在窗口上，但只响应当前嵌入编辑器内部的事件，不影响其他笔记和输入框。
+      if (editorDom && event.composedPath().includes(editorDom)) handleEditorKeydown(event);
     }
 
     const createFallbackEditor = () => {
@@ -269,7 +275,9 @@ export function renderTabGroup(
         codeMirror.dispatch(transaction);
       }
       editorDom = editorView.editor.cm?.dom ?? null;
-      if (editorDom) editorDom.addEventListener("keydown", handleEditorKeydown);
+      // 宿主全局 keymap 在窗口捕获阶段拦截 Cmd/Ctrl+Enter，事件不会到达 cm.dom。
+      // 在同一阶段监听，并由 handleNativeKeydown 限定到当前编辑器，普通输入继续交给宿主。
+      editorDom?.ownerDocument.defaultView?.addEventListener("keydown", handleNativeKeydown, true);
       window.requestAnimationFrame(() => {
         if (editorView && editorView.editor) editorView.editor.focus();
       });
