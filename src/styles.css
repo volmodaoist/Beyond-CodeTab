@@ -249,6 +249,18 @@
     display: none !important;
 }
 
+/* 原生编辑器继续负责输入，但正文只使用与预览相同的 Prism token 着色。
+   清除宿主在外层 span 上的语法颜色，避免未被 Prism 标记的普通字符沿用另一套颜色。 */
+.code-tab__native-editor.has-prism-highlighting .cm-content {
+    color: var(--code-normal);
+}
+
+.code-tab__native-editor.has-prism-highlighting .cm-line span:not(.code-tab__syntax) {
+    color: inherit !important;
+    font-weight: inherit !important;
+    font-style: inherit !important;
+}
+
 .code-tab__native-editor .cm-focused {
     outline: none !important;
 }

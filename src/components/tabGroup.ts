@@ -1,7 +1,8 @@
-import { MarkdownRenderer, Notice } from "obsidian";
+import { loadPrism, MarkdownRenderer, Notice } from "obsidian";
 import type { MarkdownPostProcessorContext, MarkdownRenderChild } from "obsidian";
 import { EditorSelection, StateEffect } from "@codemirror/state";
-import type { TransactionSpec } from "@codemirror/state";
+import type { Extension, TransactionSpec } from "@codemirror/state";
+import type * as Prism from "prismjs";
 import type CodeTabPlugin from "../main";
 import type {
   AppWithEmbedRegistry, MarkdownEmbedContext, MarkdownEmbedOptions,
@@ -12,6 +13,8 @@ import {
   serializeTabs, updateMarkdownSource,
 } from "../markdown";
 import { codeBlockEditorExtensions, findCodeBlockBody } from "./codeBlockEditor";
+import { codeHighlighting } from "./codeHighlighting";
+import type { CodeHighlighting } from "./codeHighlighting";
 
 function getGroupInfo(context: MarkdownPostProcessorContext, element: HTMLElement): TabGroupInfo {
   const section = context.getSectionInfo(element);
@@ -57,6 +60,7 @@ export function renderTabGroup(
   const buttons: HTMLButtonElement[] = [];
   const panelElements: HTMLDivElement[] = [];
   const renderingPanels = new Set<number>();
+  const panelHighlighting = new Map<number, CodeHighlighting>();
   // 只在当前笔记打开期间记住选中的标签，不向 Markdown 写入额外状态。
   let activeIndex = Math.min(plugin.activeTabs.get(group.id) || 0, tabs.length - 1);
   let editingIndex = -1;
@@ -82,6 +86,7 @@ export function renderTabGroup(
   const renderPanel = async (index: number) => {
     const panel = panelElements[index];
     renderingPanels.add(index);
+    panelHighlighting.delete(index);
     panel.empty();
     // 浏览态始终走公开 API；它比完整 embed editor 更轻，也天然支持链接、列表和代码块。
     // 部分语言名在编辑器里能识别，但 MarkdownRenderer 只接受 Prism 的规范别名。
@@ -89,6 +94,15 @@ export function renderTabGroup(
     const previewSource = normalizePreviewFenceLanguages(tabs[index].content);
     try {
       await MarkdownRenderer.render(plugin.app, previewSource, panel, context.sourcePath, component);
+      if (findCodeBlockBody(tabs[index].content)) {
+        // 预览完成后读取规范语言名（例如 c++ 已转换为 cpp），共用宿主已加载的语法定义。
+        // 提前准备扩展，点击时无需等异步加载，也不会先闪出一帧 CodeMirror 的颜色。
+        const code = panel.querySelector("pre code");
+        const languageClass = code && Array.from(code.classList).find((name) => name.startsWith("language-"));
+        const language = languageClass ? languageClass.slice("language-".length) : "";
+        const prism: typeof Prism = await loadPrism();
+        panelHighlighting.set(index, codeHighlighting(prism, language));
+      }
     } finally {
       // 预览完成后才解锁高度，避免卸载编辑器到异步渲染完成之间先塌陷、再撑开。
       panel.classList.remove("is-editing");
@@ -107,6 +121,7 @@ export function renderTabGroup(
     const panel = panelElements[index];
     const originalContent = tabs[index].content;
     const codeBody = findCodeBlockBody(originalContent);
+    const highlighting = panelHighlighting.get(index);
     const previewHeight = panel.getBoundingClientRect().height;
     let saving = false;
     let editorView: NativeMarkdownEmbed | null = null;
@@ -121,6 +136,9 @@ export function renderTabGroup(
 
     const editorHost = document.createElement("div");
     editorHost.className = "code-tab__native-editor";
+    editorHost.classList.toggle("has-prism-highlighting", !!highlighting);
+    // Prism 样式也会按语言区分 token，例如 CSS 字符串的颜色不同于普通字符串。
+    if (highlighting?.language) editorHost.classList.add("language-" + highlighting.language);
     panel.appendChild(editorHost);
 
     const getEditorValue = () => {
@@ -267,9 +285,11 @@ export function renderTabGroup(
       editorView.editor.setValue(originalContent);
       const codeMirror = editorView.editor.cm;
       if (codeBody && codeMirror) {
-        // 纯代码标签在原来的代码框内编辑正文。只折叠围栏，不替换原生高亮或文档。
+        // 纯代码标签保留原生编辑功能；围栏折叠，正文着色则与预览共用 Prism。
+        const extensions: Extension[] = codeBlockEditorExtensions();
+        if (highlighting) extensions.push(highlighting.extension);
         const transaction: TransactionSpec = {
-          effects: StateEffect.appendConfig.of(codeBlockEditorExtensions()),
+          effects: StateEffect.appendConfig.of(extensions),
           selection: EditorSelection.single(codeBody.from),
         };
         codeMirror.dispatch(transaction);
