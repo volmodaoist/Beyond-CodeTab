@@ -129,6 +129,8 @@
     /* 使用独立行盒，避免 pre 的默认字号/基线影响正文位置。 */
     display: block;
     line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-all;
 }
 
 .code-tab__panel.is-editing {
@@ -237,6 +239,10 @@
        若 HyperMD 行再应用一次，14px 会变成 12.25px，点击后文字和行高都会收缩。 */
     font-size: inherit !important;
     line-height: inherit !important;
+    /* 与预览使用相同的代码换行规则。允许直接折行，避免隐藏围栏的零宽占位符
+       被浏览器当成首行内容，把整段长代码挤到下一行。 */
+    white-space: pre-wrap !important;
+    word-break: break-all !important;
 }
 
 .code-tab__native-editor .cm-gutters {
