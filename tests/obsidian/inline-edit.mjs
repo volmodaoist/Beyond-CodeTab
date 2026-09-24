@@ -16,6 +16,25 @@ const previewCode = group.locator(".code-tab__panel:not([hidden]) pre code");
 const fileContent = () => readFile(join(vault, "Test.md"), "utf8");
 const editorContent = () => page.evaluate(() => window.codeTabTestEmbed.editor.getValue());
 
+async function setNoteMarkdown(markdown) {
+  await page.evaluate(async (markdown) => {
+    const file = app.vault.getAbstractFileByPath("Test.md");
+    if (await app.vault.read(file) === markdown) return;
+    // 写入之后还会异步更新 metadata 并重建视图。等待本次内容被解析，避免下一轮
+    // 刚创建编辑器就被上次文件修改的延迟通知卸载，形成与用户操作无关的测试竞态。
+    const parsed = new Promise((resolve) => {
+      const ref = app.metadataCache.on("changed", (changedFile, content) => {
+        if (changedFile.path === file.path && content === markdown) {
+          app.metadataCache.offref(ref);
+          resolve();
+        }
+      });
+    });
+    await app.vault.modify(file, markdown);
+    await parsed;
+  }, markdown);
+}
+
 async function settleLayout() {
   // 原生高亮、焦点与 CodeMirror 测量分帧执行，等它们稳定后再测量和发送键盘事件。
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -59,10 +78,21 @@ async function snapshot() {
     range.setEnd(textNode, Math.min(5, textNode.length));
     const style = getComputedStyle(line);
     const scroll = panel.querySelector(".cm-scroller");
+    const syntax = [];
+    const walker = document.createTreeWalker(panel.querySelector("pre code,.cm-content"), NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const tokenStyle = getComputedStyle(node.parentElement);
+      // CodeMirror 的行由 div 分隔，预览用换行符；只比较实际可见字符及其最终样式。
+      for (const character of node.textContent) {
+        if (/\s/.test(character)) continue;
+        syntax.push({ character, color: tokenStyle.color, weight: tokenStyle.fontWeight, style: tokenStyle.fontStyle });
+      }
+    }
     return {
       group: rect(group), panel: rect(panel), surface: rect(panel.firstElementChild), text: rect(range),
       font: style.fontSize, lineHeight: style.lineHeight,
       scroll: scroll && { visible: scroll.clientHeight, total: scroll.scrollHeight },
+      syntax,
     };
   });
 }
@@ -76,6 +106,14 @@ function sameGeometry(before, after, compareText = true) {
   }
   assert.equal(before.font, after.font);
   assert.equal(before.lineHeight, after.lineHeight);
+  if (compareText) sameSyntax(before, after);
+}
+
+function sameSyntax(before, after) {
+  assert.equal(before.syntax.length, after.syntax.length);
+  for (let index = 0; index < before.syntax.length; index += 1) {
+    assert.deepEqual(after.syntax[index], before.syntax[index], `字符 ${index} 的语法样式发生变化`);
+  }
 }
 
 try {
@@ -83,13 +121,13 @@ try {
   for (const mode of ["preview", "source"]) for (const theme of ["light", "dark"]) for (const width of [1000, 600]) {
     const label = `${mode}-${theme}-${width}`;
     await page.setViewportSize({ width, height: 800 });
-    await page.evaluate(async ({ initial, mode, theme }) => {
-      await app.vault.modify(app.vault.getAbstractFileByPath("Test.md"), initial);
+    await setNoteMarkdown(initial);
+    await page.evaluate(async ({ mode, theme }) => {
       document.body.removeClass("theme-light", "theme-dark");
       document.body.addClass("theme-" + theme);
       const leaf = app.workspace.getLeaf();
       await leaf.setViewState({ type: "markdown", state: { file: "Test.md", mode } });
-    }, { initial, mode, theme });
+    }, { mode, theme });
     // vault.modify 的通知异步重建预览，不能把上一轮仍挂在 DOM 中的代码块当作本轮结果。
     await page.waitForFunction(() => {
       const visible = [...document.querySelectorAll(".code-tab")].find((el) => el.checkVisibility());
@@ -165,6 +203,45 @@ try {
   await page.keyboard.press("Escape");
   await waitForPreview();
   await group.getByRole("tab", { name: "tab1" }).click();
+
+  const languageCases = [
+    ["python", 'def greet(name):\n    # 中文😀\n    return len(name) + 42'],
+    ["javascript", 'const value = `hello ${name.toUpperCase()}`;\nconsole.log(value, /a+/g);'],
+    ["c++", '#include <stdio.h>\nint main() { return 42; }'],
+    ["html", '<div class="note">Hello &amp; world</div>'],
+    ["css", '.note { color: red; font-family: "Arial"; }'],
+    ["sql", "SELECT id FROM users WHERE name = 'test' AND age > 20;"],
+    ["json", '{"name": "test", "count": 42, "active": true}'],
+    ["unknown-language", 'print("plain") + 42'],
+  ];
+  for (const theme of ["light", "dark"]) for (const [language, body] of languageCases) {
+    const source = "```" + language + "\n" + body + "\n```";
+    await page.setViewportSize({ width: 1000, height: 800 });
+    await setNoteMarkdown(initial.replace(code, source));
+    await page.evaluate((theme) => {
+      document.body.removeClass("theme-light", "theme-dark");
+      document.body.addClass("theme-" + theme);
+    }, theme);
+    await page.waitForFunction((body) => {
+      const visible = [...document.querySelectorAll(".code-tab")].find((el) => el.checkVisibility());
+      return visible?.querySelector(".code-tab__panel:not([hidden]) pre code")?.textContent.trim() === body;
+    }, body);
+    await settleLayout();
+    const before = await snapshot();
+    await enterEditor();
+    sameSyntax(before, await snapshot());
+    await page.keyboard.press("Escape");
+    await waitForPreview();
+    console.log("PASS colors", theme, language);
+    reports.push({ theme, language, result: "passed" });
+  }
+
+  await setNoteMarkdown(initial);
+  await page.waitForFunction(() => {
+    const visible = [...document.querySelectorAll(".code-tab")].find((el) => el.checkVisibility());
+    return visible?.querySelector(".code-tab__panel:not([hidden]) pre code")?.textContent.trim() === 'print("hello tab1")';
+  });
+  await settleLayout();
 
   // 私有 API 失效时仍能在原位编辑正文并保留围栏。
   await page.evaluate(() => { app.embedRegistry.getEmbedCreator = () => undefined; });
