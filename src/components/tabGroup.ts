@@ -277,7 +277,10 @@ export function renderTabGroup(
       editorDom = editorView.editor.cm?.dom ?? null;
       // 宿主全局 keymap 在窗口捕获阶段拦截 Cmd/Ctrl+Enter，事件不会到达 cm.dom。
       // 在同一阶段监听，并由 handleNativeKeydown 限定到当前编辑器，普通输入继续交给宿主。
-      editorDom?.ownerDocument.defaultView?.addEventListener("keydown", handleNativeKeydown, true);
+      const editorWindow = editorDom?.ownerDocument.defaultView;
+      editorWindow?.addEventListener("keydown", handleNativeKeydown, true);
+      // 笔记关闭/插件禁用不一定经过 leaveEditor，也必须随原生子组件卸载窗口监听。
+      editorView.register(() => editorWindow?.removeEventListener("keydown", handleNativeKeydown, true));
       window.requestAnimationFrame(() => {
         if (editorView && editorView.editor) editorView.editor.focus();
       });
