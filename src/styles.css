@@ -126,6 +126,8 @@
 }
 
 .code-tab__panel pre code {
+    /* 使用独立行盒，避免 pre 的默认字号/基线影响正文位置。 */
+    display: block;
     line-height: 1.7;
 }
 
@@ -187,14 +189,17 @@
 .code-tab__native-editor .cm-scroller {
     /* 将滚动限制在固定视口内；滚动条不预留宽度，避免正文横向位移。 */
     overflow: auto;
-    scrollbar-gutter: auto;
+    scrollbar-gutter: auto !important;
     scrollbar-width: thin;
 }
 
 .code-tab__native-editor .markdown-embed-title,
 .code-tab__native-editor .markdown-embed-link,
 .code-tab__native-editor .markdown-embed-link-icon,
+.code-tab__native-editor .inline-title,
+.code-tab__native-editor .metadata-container,
 .code-tab__native-editor .view-header {
+    /* 原生 embed 也会创建空标题和属性区；空标题仍有行高和外边距，必须移除占位。 */
     display: none !important;
 }
 
@@ -225,6 +230,13 @@
     /* 行内代码块原有的左缩进与 cm-content 的 padding 重复，只保留一层。 */
     padding-inline: 0 !important;
     max-width: none !important;
+}
+
+.code-tab__native-editor .cm-line.HyperMD-codeblock {
+    /* cm-content 已使用代码字号；宿主的 --code-size 通常是相对值（如 0.875em）。
+       若 HyperMD 行再应用一次，14px 会变成 12.25px，点击后文字和行高都会收缩。 */
+    font-size: inherit !important;
+    line-height: inherit !important;
 }
 
 .code-tab__native-editor .cm-gutters {

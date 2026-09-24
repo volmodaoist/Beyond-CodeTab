@@ -1,6 +1,6 @@
 import { EditorSelection, EditorState, Prec, StateField } from "@codemirror/state";
 import type { Extension, Range, Text, TransactionSpec } from "@codemirror/state";
-import { Decoration, EditorView, keymap } from "@codemirror/view";
+import { Decoration, EditorView, keymap, WidgetType } from "@codemirror/view";
 import type { DecorationSet, KeyBinding } from "@codemirror/view";
 
 export interface CodeBlockBody {
@@ -39,15 +39,36 @@ export function findCodeBlockBody(source: string): CodeBlockBody | null {
   return null;
 }
 
+// 围栏占据独立块且高度为零，正文不与行内占位符共享换行布局。
+// 行内 replacement 会在窄视口下留下一个“空行”，把第一行代码挤到下一行。
+class HiddenFenceWidget extends WidgetType {
+  get estimatedHeight(): number {
+    return 0;
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const element = view.dom.ownerDocument.createElement("div");
+    element.style.height = "0";
+    element.style.overflow = "hidden";
+    return element;
+  }
+}
+
+const hiddenFenceWidget = new HiddenFenceWidget();
+
 function foldedFences(doc: Text): DecorationSet {
   const body = findCodeBlockBody(doc.toString());
   if (!body) return Decoration.none;
 
   // 用 CodeMirror 的替换装饰连同换行一起折叠，编辑器能够正确计算光标、选区和滚动位置。
   // 不直接给 .cm-line 设置 display:none，那会让 DOM 高度与编辑器的行模型不一致。
+  // 正文为空时保留一个可输入的行盒；两个相邻的块装饰会吞掉它，让原生输入补出多余换行。
+  const hasBody = body.from < body.to;
   type ReplaceOptions = Parameters<typeof Decoration.replace>[0];
   const options: ReplaceOptions = {
-    inclusive: false,
+    inclusive: hasBody,
+    block: hasBody,
+    widget: hasBody ? hiddenFenceWidget : undefined,
   };
   const replacement = Decoration.replace(options);
   const ranges: Range<Decoration>[] = [
