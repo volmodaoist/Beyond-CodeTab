@@ -1,162 +1,227 @@
-.tab-container {
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 8px;
+.code-tab {
+    --code-tab-accent: var(--interactive-accent);
+    margin-block: 1.25em;
     overflow: hidden;
-    margin: 1em 0;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-l, 12px);
+    background: var(--background-primary);
+    box-shadow: none !important;
 }
 
-.tabs {
+.code-tab__list {
     display: flex;
-    background-color: var(--background-secondary);
-    border-bottom: 1px solid var(--background-modifier-border);
-    position: relative;
+    align-items: stretch;
+    gap: 0.25rem;
+    min-height: 2.9rem;
     overflow-x: auto;
     overflow-y: hidden;
-    padding: 0 !important;
-    margin-bottom: 0;
-}
-
-.tab-item {
-    padding: 8px 12px;
-    cursor: pointer;
-    border-right: 1px solid var(--background-modifier-border);
-    background-color: var(--background-secondary);
-    transition: all 0.2s ease;
-    user-select: none;
+    margin: 0;
+    padding: 0 0.4rem 0 0.65rem;
+    border-bottom: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    scrollbar-width: none;
     position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-width: fit-content;
-    font-size: 16px;
-    font-weight: bold;
 }
 
-.tab-item:hover {
-    background-color: var(--background-modifier-hover);
-    padding-right: 28px;
-}
-
-.tab-item.tab-chosen {
-    box-shadow: 0 0 8px rgba(64, 169, 255, 0.5);
-    border: 2px dashed #40a9ff;
-    opacity: 0.9;
-    transform: scale(1.02);
-}
-
-.tab-item--active {
-    background-color: var(--background-primary);
-    color: var(--text-accent);
-    border-bottom-color: #7f6df2 !important;
-}
-
-.tab-text {
-    pointer-events: all;
-    text-align: center;
-    position: relative;
-    z-index: 1;
-}
-
-.tab-delete-button {
-    opacity: 0;
-    color: var(--text-muted);
-    font-size: 16px;
-    font-weight: bold;
-    width: 0;
-    height: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 3px;
-    transition: all 0.2s ease;
-    line-height: 1;
-    cursor: pointer;
-    margin-left: 0;
-    flex-shrink: 0;
-    overflow: hidden;
-    transform: scale(0);
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform-origin: center;
-    transform: translateY(-50%) scale(0);
-}
-
-.tab-item:hover .tab-delete-button {
-    opacity: 1;
-    width: 16px;
-    transform: translateY(-50%) scale(1);
-}
-
-.tab-delete-button:hover {
-    background-color: var(--background-modifier-error);
-    color: var(--text-on-accent);
-    transform: scale(1.1);
-}
-
-.tab-content {
+.code-tab__list::-webkit-scrollbar {
     display: none;
-    background-color: var(--background-primary);
-    border: none;
-    padding: 16px 0 !important;
 }
 
-.tab-content--active {
-    display: block;
-}
-
-.tab-content .markdown-preview-view {
-    padding: 0 !important;
-    overflow: auto;
-}
-
-.tab-add-button {
-    padding: 8px 12px;
-    cursor: pointer;
-    background-color: var(--background-secondary);
+.code-tab__tab {
+    appearance: none;
+    flex: 0 0 auto;
+    min-width: 4.25rem;
+    margin: 0;
+    padding: 0.78rem 0.85rem 0.68rem;
+    border: 0 !important;
+    border-radius: 0;
+    box-shadow: none !important;
+    background: transparent !important;
+    transform: none !important;
     color: var(--text-muted);
-    font-weight: bold;
-    margin-left: auto;
-    border-left: 1px solid var(--background-modifier-border);
+    font: inherit;
+    font-size: var(--font-ui-medium);
+    font-weight: var(--font-medium, 500);
+    line-height: 1.35;
+    cursor: pointer;
+    position: relative;
+    transition: color 120ms ease, background-color 120ms ease;
 }
 
-.tab-add-button:hover {
-    background-color: var(--background-modifier-hover);
+.code-tab__tab:hover {
+    border: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    transform: none !important;
     color: var(--text-normal);
 }
 
-.tab-edit-input {
-    background: transparent;
-    border: 1px solid var(--text-accent);
-    color: var(--text-normal);
-    padding: 2px 4px;
-    font-size: inherit;
-    font-family: inherit;
-    width: 100px;
+.code-tab__tab.is-active {
+    border: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    transform: none !important;
+    color: var(--code-tab-accent);
 }
 
-.tab-drop-indicator {
+.code-tab__tab.is-active::after {
+    content: "";
     position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 3px;
-    height: 100%;
-    background-color: var(--text-accent);
-    z-index: 1001;
-    border-radius: 1px;
-    box-shadow: 0 0 8px var(--text-accent);
-    animation: pulse 0.8s infinite ease-in-out;
-    transform: translateX(-1px);
+    inset-inline: 0.45rem;
+    bottom: -1px;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    background: var(--code-tab-accent);
 }
 
-@keyframes pulse {
-    0%,
-    100% {
-        opacity: 0.6;
-        transform: translateX(-1px) scale(1);
+.code-tab__tab:focus-visible {
+    outline: 2px solid var(--background-modifier-border-focus);
+    outline-offset: -4px;
+    box-shadow: none !important;
+}
+
+.code-tab__tab:active {
+    border: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    transform: none !important;
+}
+
+.code-tab__panels {
+    background: var(--background-primary);
+}
+
+.code-tab__panel {
+    min-height: 5rem;
+    padding: 1.15rem 1.25rem;
+    color: var(--text-normal);
+    cursor: text;
+}
+
+.code-tab__panel[hidden] {
+    display: none !important;
+}
+
+.code-tab__panel > :first-child {
+    margin-top: 0 !important;
+}
+
+.code-tab__panel > :last-child {
+    margin-bottom: 0 !important;
+}
+
+.code-tab__panel pre {
+    margin-block: 0 !important;
+    padding: 1.15rem 1.35rem;
+    border: 0;
+    border-radius: var(--radius-m, 8px);
+    background: var(--code-background);
+    box-shadow: none;
+}
+
+.code-tab__panel pre code {
+    line-height: 1.7;
+}
+
+.code-tab__panel.is-editing {
+    padding: 0;
+    background: var(--code-background);
+}
+
+.code-tab__native-editor {
+    min-height: 8rem;
+    overflow: hidden;
+    background: var(--code-background);
+}
+
+/* 原生 Markdown embed 默认按整页排版，这里只保留 CodeMirror 编辑器本身。 */
+.code-tab__native-editor .markdown-embed,
+.code-tab__native-editor .markdown-embed-content,
+.code-tab__native-editor .markdown-source-view,
+.code-tab__native-editor .cm-editor,
+.code-tab__native-editor .cm-scroller {
+    min-height: inherit;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+.code-tab__native-editor .markdown-embed,
+.code-tab__native-editor .markdown-embed-content {
+    width: 100%;
+    max-height: none !important;
+}
+
+.code-tab__native-editor .markdown-source-view {
+    height: auto !important;
+}
+
+.code-tab__native-editor .markdown-embed-title,
+.code-tab__native-editor .markdown-embed-link,
+.code-tab__native-editor .markdown-embed-link-icon,
+.code-tab__native-editor .view-header {
+    display: none !important;
+}
+
+.code-tab__native-editor .cm-contentContainer {
+    padding: 0 !important;
+}
+
+.code-tab__native-editor .cm-content {
+    min-height: 8rem;
+    padding: 1.15rem 1.35rem !important;
+    font-family: var(--font-monospace);
+    font-size: var(--code-size);
+    line-height: 1.7;
+    caret-color: var(--text-accent);
+}
+
+.code-tab__native-editor .cm-gutters {
+    display: none !important;
+}
+
+.code-tab__native-editor .cm-focused {
+    outline: none !important;
+}
+
+.code-tab__fallback-editor {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 8rem;
+    resize: vertical;
+    margin: 0;
+    padding: 1.15rem 1.35rem;
+    border: 0;
+    border-radius: 0;
+    outline: 0;
+    background: var(--code-background);
+    color: var(--text-normal);
+    caret-color: var(--text-accent);
+    font-family: var(--font-monospace);
+    font-size: var(--code-size);
+    line-height: 1.7;
+    tab-size: 4;
+}
+
+.code-tab.is-editing .code-tab__tab {
+    cursor: default;
+}
+
+.code-tab__empty {
+    padding: 1rem 1.25rem;
+    color: var(--text-muted);
+}
+
+@media (max-width: 600px) {
+    .code-tab__list {
+        padding-inline-start: 0.35rem;
     }
-    50% {
-        opacity: 1;
-        transform: translateX(-1px) scale(1.2);
+
+    .code-tab__panel {
+        padding: 0.85rem;
     }
 }

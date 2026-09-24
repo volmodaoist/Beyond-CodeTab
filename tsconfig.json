@@ -3,9 +3,11 @@
         "target": "es2019",
         "module": "commonjs",
         "esModuleInterop": true,
+        "strict": true,
+        "noEmit": true,
         "skipLibCheck": true,
         "moduleResolution": "node",
         "forceConsistentCasingInFileNames": true
     },
-    "include": ["src/**/*.ts", "types.d.ts"]
+    "include": ["src/**/*.ts"]
 }

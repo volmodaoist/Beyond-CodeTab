@@ -1,32 +1,52 @@
-import { Plugin } from "obsidian";
-import { TabContainer } from "./components/tabContainer";
+import { MarkdownRenderChild, Plugin } from "obsidian";
+import { renderTabGroup } from "./components/tabGroup";
 
+/**
+ * Code Tab 的运行时分为两条路径：
+ *
+ * 1. 浏览时使用公开的 MarkdownRenderer，渲染轻、布局紧凑；
+ * 2. 用户点击内容后，才临时创建 Obsidian 原生 Markdown embed editor。
+ *
+ * 这种设计保留了原生编辑体验，又避免像上游 2.0-alpha 那样为每个标签
+ * 常驻一个完整编辑器，从而减少多余 DOM、事件监听器和整页式留白。
+ */
 export default class CodeTabPlugin extends Plugin {
-    async onload() {
-        this.registerMarkdownCodeBlockProcessor("tab", (source, element, context) => {
-            context.addChild(new TabContainer(element, context, source));
-        });
+  // key 为“文件路径 + tab 块起始行”，value 为当前选中的标签序号。
+  // 状态仅存在于内存中，避免为了 UI 状态污染用户的 Markdown。
+  activeTabs = new Map<string, number>();
 
-        this.addCommand({
-            id: "create-tab",
-            name: "创建标签组件",
-            editorCallback: (editor, view) => {
-                const defaultContent = "```tab\ntab:新标签\n内容\n```";
-                const line = editor.getCursor().line;
-                editor.replaceRange(defaultContent, { line, ch: 0 });
-                editor.setCursor({ line: line + 1, ch: 0 });
-            },
-        });
+  async onload() {
+    this.activeTabs.clear();
 
-        this.registerInterval(
-            setInterval(() => {
-                for (const id of TabContainer.activeIndexMap.keys()) {
-                    const { index, time } = TabContainer.activeIndexMap.get(id)!;
-                    if (Date.now() - time > 1000 * 60 * 5) {
-                        TabContainer.activeIndexMap.delete(id);
-                    }
-                }
-            }, 1000 * 60 * 5)
-        );
-    }
+    this.registerMarkdownCodeBlockProcessor("tab", (source, element, context) => {
+      // 每个渲染出来的 tab 块都绑定一个生命周期组件。块离开页面时，
+      // Obsidian 会卸载该组件，并清理通过组件注册的 DOM 事件。
+      const component = new MarkdownRenderChild(element);
+      context.addChild(component);
+      renderTabGroup(this, component, element, context, source);
+    });
+
+    this.addCommand({
+      id: "create-tab",
+      name: "创建标签组件",
+      editorCallback: (editor) => {
+        // 外层默认使用四个反引号，内部便可直接放常见的三个反引号代码块。
+        const fence = String.fromCharCode(96).repeat(4);
+        const template = [
+          fence + "tab",
+          "tab: 标签一",
+          "内容一",
+          "",
+          "tab: 标签二",
+          "内容二",
+          fence,
+        ].join("\n");
+        editor.replaceSelection(template);
+      },
+    });
+  }
+
+  onunload() {
+    this.activeTabs.clear();
+  }
 }

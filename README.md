@@ -1,92 +1,330 @@
-# Obsidian Code Tab
+# Obsidian Code Tab（轻量预览与原生编辑版）
 
-在 Obsidian 中加入可切换的标签页。
+在 Obsidian 笔记中使用 Markdown 创建可切换的标签页，并直接在阅读界面里编辑标签内容。
 
-## 语法
+本版本基于 [lazyloong/obsidian-code-tab](https://github.com/lazyloong/obsidian-code-tab) 的 `2.0-alpha` 版本改造，重点解决两个体验问题：
 
-用 `tab` 触发代码块，内部使用 `tab: 标题` 分隔每个标签。
-渲染之后可任意切换 tab 以查看对应的内容。
+- 浏览时不为每个标签常驻一个完整 Markdown 编辑器，减少多余留白和复杂控件。
+- 编辑时不模拟语法高亮，而是按需使用 Obsidian 原生 Markdown 编辑器。
 
-示例
+## 功能特点
 
-````
+- 支持任意数量的标签。
+- 每个标签内可以放普通 Markdown、列表、引用、链接和代码块。
+- 单击内容区域即可原地编辑。
+- 编辑时使用 Obsidian 原生 Markdown 编辑器和语法高亮。
+- 鼠标移出内容区域后自动保存。
+- `Ctrl/Cmd + Enter` 可以立即保存。
+- `Esc` 可以放弃本次修改。
+- 使用方向键、`Home` 和 `End` 切换获得焦点的标签。
+- 标签过多时支持横向滚动，但不显示突兀的滚动条。
+- 保存时保留源文件原有的 LF 或 CRLF 换行格式。
+- 预览时兼容 `c++`、`c#` 等编辑器与高亮器命名不一致的语言标记。
+
+## 安装
+
+本仓库维护 TypeScript 源码。开发环境需要 Node.js 20 或更高版本；先在仓库根目录执行：
+
+```bash
+npm ci
+npm run build
+```
+
+构建产物位于 `dist/`，安装这些产物时不需要 Node.js。
+
+1. 在 Obsidian 仓库中创建目录：
+
+   ```text
+   <你的仓库>/.obsidian/plugins/obsidian-code-tab/
+   ```
+
+2. 将 `dist/` 中的以下文件复制到该目录：
+
+   ```text
+   main.js
+   manifest.json
+   styles.css
+   ```
+
+3. 打开 Obsidian 的“设置 → 第三方插件”。
+4. 关闭并重新打开 Code Tab，或者重启 Obsidian。
+
+如果 Obsidian 尚未识别插件，可以先执行“重新加载插件”，再确认目录名和 `manifest.json` 中的 `id` 都是 `obsidian-code-tab`。
+
+## 快速开始
+
+### 普通 Markdown 标签
+
+在 Markdown 中创建一个 `tab` fenced code block，并用 `tab: 标题` 分隔内容：
+
+`````markdown
 ```tab
-tab: 标题1
-内容1
+tab: 简介
+这里可以写普通 **Markdown**。
 
-tab: 标题2
-内容2
+tab: 注意事项
+- 第一项
+- 第二项
 ```
-````
-
-![](img/img1.png)
-
-如果想在标签内加入代码块，应使用四个 ` 。
-
 `````
-````tab
 
-tab: python
+渲染后会出现“简介”和“注意事项”两个标签。
+
+### 在标签中放代码块
+
+内部代码块通常使用三个反引号，因此外层 `tab` 块需要使用四个反引号：
+
+``````markdown
+````tab
+tab: Python
 ```python
-def sum(a,b):
-    return a+b
+def greet(name: str) -> str:
+    return f"Hello, {name}!"
 ```
 
-tab: js
-```js
-function sum(a, b) {
-  return a + b;
+tab: JavaScript
+```javascript
+function greet(name) {
+  return `Hello, ${name}!`;
 }
 ```
-
 ````
+``````
+
+简单原则：外层 fence 必须比内部同类型 fence 更长。插件保存时也会自动检查这一点，必要时增加外层 fence 的长度。
+
+代码语言可以按日常习惯写成 `c++`。浏览态会在内存中将它映射为 Prism 能识别的 `cpp`，但不会修改笔记源文件：
+
+`````markdown
+```c++
+#include <stdio.h>
+
+int main() {
+    return 0;
+}
+```
 `````
 
-![](img/img2.png)
+### 使用命令创建
 
-## 命令
+打开命令面板，执行：
 
-使用 `Code Tab: 创建标签组件` 命令创建标签组件。
+```text
+Code Tab: 创建标签组件
+```
 
-![](img/img3.png)
+插件会在光标处插入包含两个标签的模板。
 
-## 通过组件直接操作源文本
+## 编辑方式
 
-以下操作都会修改源 markdown 文本，以便在 Obsidian 中直接查看效果，如果误操作了可以进入编辑模式 Ctrl+Z 撤销。
+1. 在阅读视图中选择需要修改的标签。
+2. 单击标签内容区域，进入原生 Markdown 编辑状态。
+3. 直接修改完整 Markdown 内容。代码块的 fence 和语言名也可以一起修改。
+4. 将鼠标移出内容区域，插件会自动保存并恢复预览。
 
-### 创建新标签
+快捷操作：
 
-鼠标靠近标签栏会在最右侧出现一个加号，点击即可创建新标签。
+| 操作 | 结果 |
+| --- | --- |
+| 单击内容区域 | 进入编辑 |
+| 鼠标移出内容区域 | 自动保存并返回预览 |
+| `Ctrl/Cmd + Enter` | 立即保存并返回预览 |
+| `Esc` | 放弃本次修改并返回预览 |
+| `←` / `→` | 在标签标题获得焦点时切换标签 |
+| `Home` / `End` | 跳到第一个或最后一个标签 |
 
-![](img/img4.png)
+编辑过程中暂时不能切换到另一个标签。这是为了防止切换动作与异步文件保存发生竞争，造成当前编辑内容丢失。先让鼠标离开内容区域完成保存，再切换标签即可。
 
-> BTW: 作者认为此组件的查看功能应该优于编辑功能，因此当标签足够多时会把添加按钮挤到后面，而不是固定显示
->
-> ![](img/img5.png)
+## 工作原理
 
-### 编辑标签
+```mermaid
+flowchart LR
+    A[tab fenced block] --> B[解析 tab 标题和正文]
+    B --> C[MarkdownRenderer 轻量预览]
+    C -->|单击内容| D[临时创建原生 Markdown editor]
+    D -->|鼠标离开或快捷键| E[定位原始 tab 块]
+    E --> F[vault.process 安全回写]
+    F --> G[销毁 editor 并恢复预览]
+```
 
-双击标签文字即可编辑标签。
+### 为什么浏览态不用原生编辑器
 
-![](img/img6.png)
+上游 `2.0-alpha` 会为每个标签创建一个完整的 Markdown embed。即使标签当前不可见，它的编辑器对象、DOM 和监听器仍然存在，而且 embed 自带整页布局、标题和控制按钮。标签较多时，这会让组件显得臃肿。
 
-### 删除标签
+当前版本在浏览态只调用公开的 `MarkdownRenderer`。只有被点击的标签会创建一个编辑器，因此页面平时保持轻量。
 
-鼠标靠近标签会出现一个删除按钮，双击（防止误操作）即可删除标签。
+### 为什么编辑态仍然使用原生编辑器
 
-![](img/img7.png)
+曾尝试过使用 `textarea` 加高亮镜像层模拟代码编辑：透明输入框负责输入，底层或上层代码节点负责颜色显示。这个方案很容易受到 Obsidian 主题、Electron/WebView 的层叠上下文和文本填充规则影响，实际出现过点击后内容完全不可见的问题。
 
-### 移动标签
+因此当前版本不再自己模拟编辑器，而是在用户点击时调用 Obsidian 的 Markdown embed editor。语法高亮、光标、选区、撤销和输入法兼容由 Obsidian 自己负责。
 
-鼠标长按标签超过 75 毫秒即可拖动标签，拖动时会出现一个虚影。
+### 为什么使用私有 API
 
-![](img/img8.png)
+Obsidian 的公开 API 可以渲染 Markdown，但目前没有提供一个等价的、可嵌入任意容器的完整 Markdown 编辑器接口。因此编辑态使用了：
 
-### 编辑内容
+```javascript
+app.embedRegistry.getEmbedCreator({ extension: "md" })
+```
 
-双击标签内容即可编辑内容（所见即所得！），按下 ESC 或点击内容区域外的地方即可退出编辑模式并修改源文本。
+`embedRegistry` 是私有 API，未来 Obsidian 升级后可能发生变化。插件已经准备了普通 `textarea` 降级路径：即使原生编辑器创建失败，内容仍然可见、可编辑、可保存。
 
-![](img/img9.png)
+### 保存为什么要匹配旧内容
 
-> PS: 理所应当的，如果在编辑器中间写下 `tab: 标题`，保存后会分裂成两个标签
-> ![](img/img10.png)
+一个笔记里可以有多个 `tab` 块，而且编辑期间源文件可能被另一个窗格或同步工具修改。插件保存时不会仅凭旧行号强行覆盖，而是：
+
+1. 在当前文件中查找内容与编辑前完全一致的 `tab` 块。
+2. 如果有多个匹配项，选择距离原始行号最近的一个。
+3. 如果一个都找不到，停止保存并提示刷新笔记。
+
+这是一种乐观并发保护，目标是宁可提示冲突，也不覆盖用户在其他位置完成的新修改。
+
+## 语法约束
+
+- 标签声明必须单独占一行，格式为 `tab: 标题`。
+- 标签声明前允许有空格。
+- fenced code block 内部出现的 `tab:` 不会被误识别为新标签。
+- `c++` 和 `c#` 在预览时分别映射为 `cpp` 和 `csharp`，源 Markdown 保持原样。
+- 空标题会自动显示为“标签1”“标签2”等名称。
+- 标签内容首尾的空行会被规整，正文内部空行保持不变。
+- 当前版本不提供标签新增、删除、重命名和拖拽排序按钮；这些操作可直接在源 Markdown 中完成。
+
+## 开发与文件结构
+
+```text
+obsidian-code-tab/
+├── src/
+│   ├── main.ts                    # 插件注册、命令和标签选中状态
+│   ├── markdown.ts                # 标签解析、序列化和源文件回写
+│   ├── components/
+│   │   ├── tabGroup.ts            # 轻量预览、原生编辑器和交互
+│   │   └── types.ts               # 标签数据与私有 embed API 类型
+│   └── styles.css                 # 标签、预览和原生编辑器样式
+├── tests/markdown.test.mjs        # 解析和文件回写回归测试
+├── esbuild.config.mjs             # 构建和监听模式
+├── manifest.json                  # 插件元数据
+├── package.json
+├── package-lock.json
+├── tsconfig.json
+├── README.md
+├── LICENSE                        # MIT License
+└── dist/                          # 构建产物，不提交到 Git
+    ├── main.js
+    ├── manifest.json
+    └── styles.css
+```
+
+### 常用开发命令
+
+以下命令均在仓库根目录执行，需要 Node.js 20 或更高版本：
+
+| 命令 | 用途 | 运行结果 |
+| --- | --- | --- |
+| `npm ci` | 首次开发或依赖锁文件更新后安装依赖 | 按 `package-lock.json` 安装到 `node_modules/` |
+| `npm run dev` | 开发时持续监听源码、样式和清单变化 | 自动更新 `dist/`，按 `Ctrl + C` 停止 |
+| `npm run typecheck` | 单独检查 TypeScript 类型 | 在终端报告类型错误，不生成产物 |
+| `npm test` | 运行解析和文件回写回归测试 | 在终端显示测试结果，不打开界面 |
+| `npm run build` | 检查类型并生成插件安装文件 | 生成 `dist/main.js`、`dist/manifest.json` 和 `dist/styles.css` |
+
+首次开始开发：
+
+```bash
+npm ci
+npm run dev
+```
+
+完成修改后，在另一个终端运行以下命令；也可以先停止监听再执行：
+
+```bash
+npm test && npm run build
+```
+
+`npm run build` 已包含 TypeScript 类型检查，`npm run dev` 不做类型检查。构建与监听都只更新本仓库的 `dist/`，不会自动复制到 Obsidian 插件目录，也不会自动重新加载插件。
+
+本仓库从已在插件目录运行的本地 `2.2.1` 版本迁入，保留既有功能与样式，并恢复了 TypeScript 源码、构建脚本和回归测试。后续改动以 `src/` 为准，不直接编辑 `dist/main.js`。旧版新增、删除、重命名和拖拽组件已由当前实现替换；历史代码可通过 Git 查看。
+
+### 没有 Obsidian 时如何验证
+
+当前仓库没有独立的浏览器预览页面。`npm run dev` 只启动构建监听，不会启动 HTTP 服务、输出 `localhost` 预览地址或打开前端页面。`dist/main.js` 是由 Obsidian 加载的插件入口，运行时依赖 Obsidian 提供的 API，不能通过直接打开文件或执行 `node dist/main.js` 来预览。
+
+只安装 Node.js 时，可以运行 `npm test && npm run build`，验证以下内容：
+
+- TypeScript 类型正确，源码可以打包生成插件产物。
+- 标签解析、嵌套代码块、空标题和预览语言别名符合预期。
+- 在模拟的 Vault 文件接口中，保存能正确定位目标标签块、保留 LF/CRLF 换行，并在原内容已改变时拒绝覆盖。
+
+这些检查通过说明构建和已覆盖的逻辑符合预期。当前 `npm test` 不会启动真实 Obsidian、渲染界面或创建原生编辑器，因此不能据此确认主题外观、编辑器高亮、鼠标键盘交互和真实文件保存全部可用。
+
+如果需要在浏览器里预览样式和基础交互，需要另外开发预览页面，并模拟 Markdown 渲染、文件读写等 Obsidian 接口。浏览器预览也无法完整验证 Obsidian 私有的原生编辑器 API；本仓库目前尚未提供这种预览入口。
+
+### 在 Obsidian 中验证完整效果
+
+1. 在 Obsidian 中创建并打开一个专门用于开发测试的笔记仓库（Vault）。
+2. 执行 `npm run build`，将 `dist/` 中的三个文件复制到测试仓库的 `.obsidian/plugins/obsidian-code-tab/`。
+3. 在“设置 → 第三方插件”中启用 Code Tab。
+4. 新建笔记，粘贴本文“快速开始”中的示例，在阅读视图中检查标签和编辑效果。
+5. 每次修改后，等待 `npm run dev` 完成构建，或重新执行 `npm run build`；再次复制产物，并关闭再启用插件，或重启 Obsidian。
+
+完整回归时按下方清单检查，并确认编辑后的内容已写入笔记源 Markdown。
+
+## 手工测试清单
+
+修改插件后，建议至少检查：
+
+- 普通 Markdown 标签可以正常渲染和切换。
+- 标签内的三反引号代码块不会截断外层四反引号 `tab` 块。
+- 单击内容后出现原生编辑器，内容不为空。
+- 编辑代码时仍有 Obsidian 原生语法高亮。
+- 鼠标离开后内容写回当前标签，而不是其他同名标签。
+- `Esc` 不写文件，`Ctrl/Cmd + Enter` 能立即保存。
+- 同一篇笔记有多个 `tab` 块时均能正确保存。
+- 亮色和暗色主题下 Tab 没有按钮阴影或可见滚动条。
+- 原始文件使用 CRLF 时，保存不会把整段换成 LF。
+
+## 已知限制
+
+- 原生嵌入编辑器依赖 Obsidian 私有 API，Obsidian 大版本升级后需要回归测试。
+- 移动设备没有稳定的鼠标离开事件，建议使用 `Ctrl/Cmd + Enter`，或切换到源码模式编辑。
+- 当前编辑会话未结束时不会切换标签，以免丢失尚未保存的内容。
+
+## 演进记录
+
+### 上游 2.0-alpha
+
+- 每个标签常驻一个原生 Markdown embed。
+- 支持新增、删除、重命名、拖拽和内容编辑。
+- 缺点是布局偏重，容易出现整页 padding 和多余 embed 控件。
+
+### 本地重写 2.0.1
+
+- 浏览态改用公开的 `MarkdownRenderer`。
+- 页面更紧凑，但暂时移除了阅读视图中的直接编辑。
+
+### 2.1.x 探索
+
+- 尝试以轻量 `textarea` 实现点击编辑和自动保存。
+- 又尝试叠加高亮镜像层模拟实时语法颜色。
+- 该方案在部分主题和 WebView 中会出现透明文字与高亮层都不可见的问题，因此最终废弃。
+
+### 2.2.0
+
+- 浏览态继续保留轻量渲染。
+- 编辑态改为按需创建 Obsidian 原生 Markdown embed editor。
+- 保存后立即卸载编辑器，并保留可见 textarea 降级路径。
+- 保留无阴影标签样式、隐藏滚动条和自动保存体验。
+
+### 2.2.1
+
+- 修复 `c++`、`c#` 在编辑态能够识别，但浏览态缺少语法高亮的问题。
+- 语言别名只在传给 MarkdownRenderer 的副本中转换，不改写用户源文件。
+
+## 分享与致谢
+
+本版本基于以下项目改造：
+
+- 上游仓库：[lazyloong/obsidian-code-tab](https://github.com/lazyloong/obsidian-code-tab)
+- 上游版本：`2.0-alpha`
+- 上游作者：lazyloong
+- 许可证：MIT
+
+如果要公开发布修改版，建议在仓库说明和 Release 中保留上述来源，并明确标注这是派生版本。
