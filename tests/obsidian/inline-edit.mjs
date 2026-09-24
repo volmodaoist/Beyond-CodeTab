@@ -97,9 +97,10 @@ async function snapshot() {
   });
 }
 
-function sameGeometry(before, after, compareText = true) {
+function sameGeometry(before, after, compareText = true, allowPageScroll = false) {
   for (const part of ["group", "panel", "surface", ...(compareText ? ["text"] : [])]) {
     for (const dimension of ["x", "y", "width", "height"]) {
+      if (allowPageScroll && dimension === "y") continue;
       assert.ok(Math.abs(before[part][dimension] - after[part][dimension]) < 1,
         `${part}.${dimension}: ${before[part][dimension]} -> ${after[part][dimension]}`);
     }
@@ -107,6 +108,14 @@ function sameGeometry(before, after, compareText = true) {
   assert.equal(before.font, after.font);
   assert.equal(before.lineHeight, after.lineHeight);
   if (compareText) sameSyntax(before, after);
+}
+
+function growsWithContent(before, after) {
+  assert.ok(after.surface.height > before.surface.height + 10, "增加行后代码框应该自然增高");
+  for (const part of ["group", "panel", "surface"]) {
+    assert.equal(after[part].width, before[part].width, part + " 的宽度不应随输入改变");
+  }
+  assert.ok(after.scroll.total <= after.scroll.visible + 1, "编辑器应展示全部内容，不产生内部纵向滚动");
 }
 
 function sameSyntax(before, after) {
@@ -151,7 +160,8 @@ try {
     await page.keyboard.press("Meta+z");
     await page.keyboard.press("Meta+Shift+z");
     assert.equal(await editorContent(), appended);
-    sameGeometry(before, await snapshot(), false);
+    await settleLayout();
+    growsWithContent(before, await snapshot());
     await page.keyboard.press("Meta+Enter");
     await waitForPreview();
     const saved = initial.replace(code, appended);
@@ -177,11 +187,21 @@ try {
     await paste(Array.from({ length: 30 }, (_, index) => `print(${index})`).join("\n"));
     await settleLayout();
     const longContent = await snapshot();
-    sameGeometry(savedGeometry, longContent, false);
-    assert.ok(longContent.scroll.total > longContent.scroll.visible, "长内容应在固定面板内滚动");
+    growsWithContent(savedGeometry, longContent);
+    assert.ok(longContent.surface.height >= 30 * Number.parseFloat(longContent.lineHeight), "30 行应完整撑开代码框");
+    // 删除后立即收缩，并保持输入会话；撤销后恢复长内容及其高度。
+    await page.keyboard.press("Meta+A");
+    await paste("print(1)");
+    await settleLayout();
+    const shortened = await snapshot();
+    assert.ok(shortened.surface.height < longContent.surface.height - 100);
+    assert.equal(await editorContent(), "```python\nprint(1)\n```");
+    await page.keyboard.press("Meta+z");
+    await settleLayout();
+    growsWithContent(savedGeometry, await snapshot());
     await page.keyboard.press("Escape");
     await waitForPreview();
-    sameGeometry(savedGeometry, await snapshot());
+    sameGeometry(savedGeometry, await snapshot(), true, true);
 
     await enterEditor();
     await page.keyboard.press("Meta+A");
@@ -247,7 +267,12 @@ try {
   await page.evaluate(() => { app.embedRegistry.getEmbedCreator = () => undefined; });
   await previewCode.click();
   const fallback = group.locator("textarea");
+  const shortBounds = await fallback.boundingBox();
+  await fallback.fill(Array.from({ length: 10 }, (_, index) => `print(${index})`).join("\n"));
+  const longBounds = await fallback.boundingBox();
+  assert.ok(longBounds.height > shortBounds.height + 100, "降级输入框也应随正文增高");
   await fallback.fill("print(789)");
+  assert.ok((await fallback.boundingBox()).height < longBounds.height - 100);
   await fallback.press("Control+Enter");
   await waitForPreview();
   assert.equal(await fileContent(), initial.replace(code, "```python\nprint(789)\n```"));

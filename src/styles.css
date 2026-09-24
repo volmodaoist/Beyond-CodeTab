@@ -134,16 +134,19 @@
 }
 
 .code-tab__panel.is-editing {
-    /* 高度在进入编辑前测量。保留预览态的 padding 和背景，只有内部编辑器滚动。 */
-    height: var(--code-tab-editor-height);
+    /* 字体和留白与预览一致；高度交给正文决定，回车/粘贴后自然向下扩展。 */
     min-height: 0;
-    overflow: hidden;
+}
+
+.code-tab__panel.is-restoring {
+    /* 只在卸载编辑器到异步预览完成之间保持高度，防止内容短暂塌陷。 */
+    min-height: var(--code-tab-restore-height);
 }
 
 .code-tab__native-editor {
     box-sizing: border-box;
     width: 100%;
-    height: 100%;
+    height: auto;
     min-width: 0;
     min-height: 0;
     overflow: hidden;
@@ -183,14 +186,14 @@
 .code-tab__native-editor .cm-editor,
 .code-tab__native-editor .cm-scroller {
     width: 100%;
-    height: 100% !important;
-    max-height: 100%;
-    overflow: hidden;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible;
 }
 
 .code-tab__native-editor .cm-scroller {
-    /* 将滚动限制在固定视口内；滚动条不预留宽度，避免正文横向位移。 */
-    overflow: auto;
+    /* 和笔记中的原生代码块一样由整页滚动，编辑器不建立内部滚动视口。 */
+    overflow: visible !important;
     scrollbar-gutter: auto !important;
     scrollbar-width: thin;
 }
@@ -207,7 +210,7 @@
 
 .code-tab__native-editor .cm-sizer {
     /* Obsidian 会以内联样式给整页编辑器添加上下留白，短代码块不需要这些空间。 */
-    min-height: 100% !important;
+    min-height: 0 !important;
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
@@ -269,10 +272,11 @@
     display: block;
     box-sizing: border-box;
     width: 100%;
-    height: 100%;
+    height: auto;
     min-height: 0;
+    max-height: none;
     resize: none;
-    overflow: auto;
+    overflow: hidden;
     margin: 0;
     padding: var(--code-tab-code-padding);
     border: 0;

@@ -1,4 +1,4 @@
-import { loadPrism, MarkdownRenderer, Notice } from "obsidian";
+import { Component, loadPrism, MarkdownRenderer, Notice } from "obsidian";
 import type { MarkdownPostProcessorContext, MarkdownRenderChild } from "obsidian";
 import { EditorSelection, StateEffect } from "@codemirror/state";
 import type { Extension, TransactionSpec } from "@codemirror/state";
@@ -105,13 +105,13 @@ export function renderTabGroup(
       }
     } finally {
       // 预览完成后才解锁高度，避免卸载编辑器到异步渲染完成之间先塌陷、再撑开。
-      panel.classList.remove("is-editing");
-      panel.style.removeProperty("--code-tab-editor-height");
+      panel.classList.remove("is-editing", "is-restoring");
+      panel.style.removeProperty("--code-tab-restore-height");
       renderingPanels.delete(index);
     }
   };
 
-  const startEditing = (index: number) => {
+  const startEditing = (index: number, click: MouseEvent) => {
     // 一个 tab 组件同一时间只维护一个编辑会话。
     if (editingIndex >= 0 || renderingPanels.has(index)) return;
     activate(index);
@@ -122,15 +122,16 @@ export function renderTabGroup(
     const originalContent = tabs[index].content;
     const codeBody = findCodeBlockBody(originalContent);
     const highlighting = panelHighlighting.get(index);
-    const previewHeight = panel.getBoundingClientRect().height;
     let saving = false;
     let editorView: NativeMarkdownEmbed | null = null;
     let editorDom: HTMLElement | null = null;
     let fallbackTextarea: HTMLTextAreaElement | null = null;
-    // 锁定的是包含 padding 的整个面板高度；编辑器只占内部空间。
-    // 原生编辑器会添加围栏行和整页留白，min-height 无法阻止它继续撑大卡片。
-    // 编辑期间新增内容由内部滚动承载，保存后再让预览按实际内容决定高度。
-    panel.style.setProperty("--code-tab-editor-height", previewHeight + "px");
+    let pointerX = click.clientX;
+    let pointerY = click.clientY;
+    // 临时会话统一管理原生编辑器和文档级事件，退出、关笔记或禁用插件时一并释放。
+    const editorSession = component.addChild(new Component());
+    // 原生编辑器的整页留白由局部 CSS 清理；正文和外围容器均按内容自然排版。
+    // 进入编辑时字体/留白不变，新增或删除行时则允许卡片跟着增高或收缩。
     panel.empty();
     panel.addClass("is-editing");
 
@@ -156,7 +157,7 @@ export function renderTabGroup(
       if (!editorView) return;
       try {
         // 动态创建的子组件必须及时卸载，避免关闭标签后仍保留编辑器监听器。
-        component.removeChild(editorView);
+        editorSession.removeChild(editorView);
       } catch (error) {
         console.warn("Code Tab: failed to unload native Markdown editor", error);
       }
@@ -165,12 +166,16 @@ export function renderTabGroup(
     };
 
     const leaveEditor = async () => {
+      // 仅在切回异步预览时暂存当前高度；编辑过程中不限制正文高度。
+      panel.style.setProperty("--code-tab-restore-height", panel.getBoundingClientRect().height + "px");
+      panel.classList.add("is-restoring");
       // 先解绑手工注册的事件，再卸载原生组件，最后恢复轻量预览。
-      panel.removeEventListener("mouseleave", save);
       if (fallbackTextarea) {
         fallbackTextarea.removeEventListener("keydown", handleEditorKeydown);
+        fallbackTextarea.removeEventListener("input", resizeFallbackEditor);
       }
       destroyEditor();
+      component.removeChild(editorSession);
       try {
         if (panel.isConnected) await renderPanel(index);
       } finally {
@@ -242,6 +247,23 @@ export function renderTabGroup(
       if (editorDom && event.composedPath().includes(editorDom)) handleEditorKeydown(event);
     }
 
+    function handlePointerMove(event: MouseEvent) {
+      // 内容增高、收缩或页面跟随光标滚动都会触发 mouseleave，即使鼠标没有移动。
+      // 只在指针实际移动到面板外时保存，避免用户正在回车/删除时突然退出编辑。
+      const moved = event.clientX !== pointerX || event.clientY !== pointerY;
+      pointerX = event.clientX;
+      pointerY = event.clientY;
+      if (moved && !event.composedPath().includes(panel)) save();
+    }
+
+    function resizeFallbackEditor() {
+      if (!fallbackTextarea) return;
+      // textarea 不会像 CodeMirror 一样随正文排版。先归零再测量，增行和删行都能生效。
+      // 两次赋值在同一个输入事件内完成，不会把中间的零高度绘制到界面上。
+      fallbackTextarea.style.height = "0";
+      fallbackTextarea.style.height = fallbackTextarea.scrollHeight + "px";
+    }
+
     const createFallbackEditor = () => {
       // 私有 embed API 在未来版本失效时，至少保留一个始终可见、可保存的编辑入口。
       editorHost.empty();
@@ -251,8 +273,11 @@ export function renderTabGroup(
         ? originalContent.slice(codeBody.from, codeBody.to)
         : originalContent;
       fallbackTextarea.spellcheck = false;
+      fallbackTextarea.rows = 1;
       fallbackTextarea.addEventListener("keydown", handleEditorKeydown);
+      fallbackTextarea.addEventListener("input", resizeFallbackEditor);
       editorHost.appendChild(fallbackTextarea);
+      resizeFallbackEditor();
       window.requestAnimationFrame(() => fallbackTextarea?.focus());
     };
 
@@ -277,8 +302,8 @@ export function renderTabGroup(
       };
 
       editorView = embedCreator(embedContext, null);
-      // 把私有 embed 纳入当前 MarkdownRenderChild 的生命周期，笔记关闭时可被统一卸载。
-      component.addChild(editorView);
+      // 私有 embed 归属临时会话，最终仍由 MarkdownRenderChild 管理生命周期。
+      editorSession.addChild(editorView);
       editorView.editable = true;
       editorView.showEditor();
       if (!editorView.editor) throw new Error("Markdown editor was not initialized");
@@ -310,8 +335,8 @@ export function renderTabGroup(
       createFallbackEditor();
     }
 
-    // 指针离开整个内容面板时自动读取编辑器内容并保存。
-    panel.addEventListener("mouseleave", save);
+    // 在文档上观察真实移动，面板因布局变化移走后，下一次主动移出仍可触发保存。
+    editorSession.registerDomEvent(panel.ownerDocument, "mousemove", handlePointerMove);
   };
 
   tabs.forEach((tab, index) => {
@@ -364,7 +389,7 @@ export function renderTabGroup(
       } else if (target.closest("a, button, input, textarea, select")) {
         return;
       }
-      startEditing(index);
+      startEditing(index, event);
     });
   });
 
