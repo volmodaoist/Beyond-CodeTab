@@ -69,6 +69,15 @@ export async function launchTestVault(initialMarkdown) {
     await page.waitForFunction(() => window.app?.vault?.adapter?.basePath);
     // 后续操作的硬边界：必须是本次创建的测试仓库，绝不能连接到用户已打开的仓库。
     assert.equal(await page.evaluate(() => app.vault.adapter.basePath), vault);
+    if (process.env.CODE_TAB_SHOW_TEST_WINDOW !== "1") {
+      // 隐藏本次独立窗口，避免桌面上的实际鼠标操作混入自动化事件，或测试抢占用户窗口。
+      // 关闭后台节流后仍使用真实布局、绘制和 CodeMirror；CDP 输入与截图照常工作。
+      await page.evaluate(() => {
+        const testWindow = require("@electron/remote").getCurrentWindow();
+        testWindow.webContents.setBackgroundThrottling(false);
+        testWindow.hide();
+      });
+    }
     const trust = page.getByText(/^(信任仓库作者并启用插件|Trust author and enable plugins)$/);
     await trust.click();
     await page.waitForFunction(() => app.plugins.plugins["obsidian-code-tab"]);

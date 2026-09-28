@@ -1,6 +1,6 @@
 import { Component, loadPrism, MarkdownRenderer, Notice } from "obsidian";
 import type { MarkdownPostProcessorContext, MarkdownRenderChild } from "obsidian";
-import { EditorSelection, StateEffect } from "@codemirror/state";
+import { Compartment, EditorSelection, StateEffect } from "@codemirror/state";
 import type { Extension, TransactionSpec } from "@codemirror/state";
 import type * as Prism from "prismjs";
 import type CodeTabPlugin from "../main";
@@ -15,6 +15,10 @@ import {
 import { codeBlockEditorExtensions, findCodeBlockBody } from "./codeBlockEditor";
 import { codeHighlighting } from "./codeHighlighting";
 import type { CodeHighlighting } from "./codeHighlighting";
+import { getCodeLanguage, replaceCodeLanguage } from "./codeLanguage";
+import { CodeLanguageInput } from "./languageInput";
+
+const EMPTY_CODE_BLOCK = "```text\n\n```";
 
 function getGroupInfo(context: MarkdownPostProcessorContext, element: HTMLElement): TabGroupInfo {
   const section = context.getSectionInfo(element);
@@ -53,6 +57,14 @@ export function renderTabGroup(
   tabList.setAttribute("role", "tablist");
   element.appendChild(tabList);
 
+  const addButton = document.createElement("button");
+  addButton.className = "code-tab__add";
+  addButton.type = "button";
+  addButton.textContent = "+";
+  addButton.setAttribute("aria-label", "新增标签");
+  addButton.title = "新增标签";
+  tabList.appendChild(addButton);
+
   const panels = document.createElement("div");
   panels.className = "code-tab__panels";
   element.appendChild(panels);
@@ -64,13 +76,16 @@ export function renderTabGroup(
   // 只在当前笔记打开期间记住选中的标签，不向 Markdown 写入额外状态。
   let activeIndex = Math.min(plugin.activeTabs.get(group.id) || 0, tabs.length - 1);
   let editingIndex = -1;
+  let addingTab = false;
+  // 新增标签可先等待当前编辑保存；与鼠标移出共享同一次保存，避免并发覆盖。
+  let saveCurrentEditor: (() => Promise<boolean>) | null = null;
 
-  const activate = (index: number, focus = false) => {
+  const activate = (index: number, focus = false, rememberSelection = true) => {
     // 编辑中不允许直接切换标签，否则鼠标点击会先销毁当前编辑器并丢失未保存内容。
     if (editingIndex >= 0 && editingIndex !== index) return;
 
     activeIndex = index;
-    plugin.activeTabs.set(group.id, index);
+    if (rememberSelection) plugin.activeTabs.set(group.id, index);
 
     buttons.forEach((button, buttonIndex) => {
       const active = buttonIndex === index;
@@ -113,7 +128,7 @@ export function renderTabGroup(
 
   const startEditing = (index: number, click: MouseEvent) => {
     // 一个 tab 组件同一时间只维护一个编辑会话。
-    if (editingIndex >= 0 || renderingPanels.has(index)) return;
+    if (editingIndex >= 0 || addingTab || renderingPanels.has(index)) return;
     activate(index);
     editingIndex = index;
     element.addClass("is-editing");
@@ -121,10 +136,12 @@ export function renderTabGroup(
     const panel = panelElements[index];
     const originalContent = tabs[index].content;
     const codeBody = findCodeBlockBody(originalContent);
-    const highlighting = panelHighlighting.get(index);
+    let highlighting = panelHighlighting.get(index);
+    const highlightingSlot = new Compartment();
+    let languageInput: CodeLanguageInput | null = null;
     let saving = false;
+    let pendingSave: Promise<boolean> | null = null;
     let editorView: NativeMarkdownEmbed | null = null;
-    let editorDom: HTMLElement | null = null;
     let fallbackTextarea: HTMLTextAreaElement | null = null;
     let pointerX = click.clientX;
     let pointerY = click.clientY;
@@ -153,7 +170,6 @@ export function renderTabGroup(
     };
 
     const destroyEditor = () => {
-      editorDom?.ownerDocument.defaultView?.removeEventListener("keydown", handleNativeKeydown, true);
       if (!editorView) return;
       try {
         // 动态创建的子组件必须及时卸载，避免关闭标签后仍保留编辑器监听器。
@@ -162,7 +178,6 @@ export function renderTabGroup(
         console.warn("Code Tab: failed to unload native Markdown editor", error);
       }
       editorView = null;
-      editorDom = null;
     };
 
     const leaveEditor = async () => {
@@ -171,7 +186,6 @@ export function renderTabGroup(
       panel.classList.add("is-restoring");
       // 先解绑手工注册的事件，再卸载原生组件，最后恢复轻量预览。
       if (fallbackTextarea) {
-        fallbackTextarea.removeEventListener("keydown", handleEditorKeydown);
         fallbackTextarea.removeEventListener("input", resizeFallbackEditor);
       }
       destroyEditor();
@@ -180,6 +194,7 @@ export function renderTabGroup(
         if (panel.isConnected) await renderPanel(index);
       } finally {
         editingIndex = -1;
+        saveCurrentEditor = null;
         element.removeClass("is-editing");
       }
     };
@@ -192,40 +207,58 @@ export function renderTabGroup(
       await leaveEditor();
     };
 
-    const save = async () => {
-      if (editingIndex !== index || saving) return;
+    const persistEdit = async (): Promise<boolean> => {
+      if (editingIndex !== index || saving) return false;
+      if (languageInput?.value === null) {
+        new Notice("语言名只能包含字母、数字、+、#、-、_ 和 .", 5000);
+        languageInput.input.focus();
+        return false;
+      }
       saving = true;
 
-      const nextContent = getEditorValue().replace(/^\n+|\n+$/g, "");
-      // 鼠标移出同样会触发保存；内容未变化时直接退出，避免无意义地改写文件。
-      if (nextContent === originalContent) {
-        await leaveEditor();
-        return;
-      }
-
-      const nextTabs = tabs.map((tab, tabIndex) => {
-        // 创建新数组而不是原地修改；只有文件写入成功后才提交到内存状态。
-        const nextTab: TabData = {
-          title: tab.title,
-          content: tabIndex === index ? nextContent : tab.content,
-        };
-
-        return nextTab;
-      });
-      const nextSource = serializeTabs(nextTabs);
-
       try {
+        let nextContent = getEditorValue().replace(/^\n+|\n+$/g, "");
+        // 编辑器继续保护原始围栏，语言选择在保存时合入，不重建编辑器或打断正文撤销历史。
+        if (languageInput && languageInput.input.value !== getCodeLanguage(originalContent)) {
+          const language = languageInput.value;
+          if (language !== null) nextContent = replaceCodeLanguage(nextContent, language);
+        }
+        // 鼠标移出同样会触发保存；内容未变化时直接退出，避免无意义地改写文件。
+        if (nextContent === originalContent) {
+          await leaveEditor();
+          return true;
+        }
+
+        const nextTabs = tabs.map((tab, tabIndex) => {
+          // 创建新数组而不是原地修改；只有文件写入成功后才提交到内存状态。
+          const nextTab: TabData = {
+            title: tab.title,
+            content: tabIndex === index ? nextContent : tab.content,
+          };
+
+          return nextTab;
+        });
+        const nextSource = serializeTabs(nextTabs);
+
         // 先安全写回源文件，再更新预览使用的 source/tabs，避免失败时 UI 假装已保存。
         await updateMarkdownSource(plugin.app, context.sourcePath, group.lineStart, source, nextSource);
         tabs = nextTabs;
         source = nextSource;
         await leaveEditor();
+        return true;
       } catch (error) {
         console.error("Code Tab: failed to save tab content", error);
         new Notice(error instanceof Error ? error.message : "标签内容保存失败", 5000);
         saving = false;
+        return false;
       }
     };
+
+    const save = (): Promise<boolean> => {
+      if (!pendingSave) pendingSave = persistEdit().finally(() => { pendingSave = null; });
+      return pendingSave;
+    };
+    saveCurrentEditor = save;
 
     function handleEditorKeydown(event: KeyboardEvent) {
       // Esc 是明确的“放弃”，Cmd/Ctrl+Enter 是无需移开鼠标的主动保存快捷键。
@@ -242,9 +275,9 @@ export function renderTabGroup(
       }
     }
 
-    function handleNativeKeydown(event: KeyboardEvent) {
-      // 监听虽在窗口上，但只响应当前嵌入编辑器内部的事件，不影响其他笔记和输入框。
-      if (editorDom && event.composedPath().includes(editorDom)) handleEditorKeydown(event);
+    function handleSessionKeydown(event: KeyboardEvent) {
+      // 窗口捕获监听只处理本面板，覆盖正文、语言框和降级输入框，不影响其他笔记。
+      if (event.composedPath().includes(panel)) handleEditorKeydown(event);
     }
 
     function handlePointerMove(event: MouseEvent) {
@@ -253,7 +286,9 @@ export function renderTabGroup(
       const moved = event.clientX !== pointerX || event.clientY !== pointerY;
       pointerX = event.clientX;
       pointerY = event.clientY;
-      if (moved && !event.composedPath().includes(panel)) save();
+      // 移向 + 时交给新增动作保存，让保存和新增按顺序完成。
+      const path = event.composedPath();
+      if (moved && !path.includes(panel) && !path.includes(addButton)) save();
     }
 
     function resizeFallbackEditor() {
@@ -274,7 +309,6 @@ export function renderTabGroup(
         : originalContent;
       fallbackTextarea.spellcheck = false;
       fallbackTextarea.rows = 1;
-      fallbackTextarea.addEventListener("keydown", handleEditorKeydown);
       fallbackTextarea.addEventListener("input", resizeFallbackEditor);
       editorHost.appendChild(fallbackTextarea);
       resizeFallbackEditor();
@@ -312,20 +346,14 @@ export function renderTabGroup(
       if (codeBody && codeMirror) {
         // 纯代码标签保留原生编辑功能；围栏折叠，正文着色则与预览共用 Prism。
         const extensions: Extension[] = codeBlockEditorExtensions();
-        if (highlighting) extensions.push(highlighting.extension);
+        // 独立 compartment 只更换着色，语言切换不影响围栏保护、光标和正文撤销。
+        extensions.push(highlightingSlot.of(highlighting ? highlighting.extension : []));
         const transaction: TransactionSpec = {
           effects: StateEffect.appendConfig.of(extensions),
           selection: EditorSelection.single(codeBody.from),
         };
         codeMirror.dispatch(transaction);
       }
-      editorDom = editorView.editor.cm?.dom ?? null;
-      // 宿主全局 keymap 在窗口捕获阶段拦截 Cmd/Ctrl+Enter，事件不会到达 cm.dom。
-      // 在同一阶段监听，并由 handleNativeKeydown 限定到当前编辑器，普通输入继续交给宿主。
-      const editorWindow = editorDom?.ownerDocument.defaultView;
-      editorWindow?.addEventListener("keydown", handleNativeKeydown, true);
-      // 笔记关闭/插件禁用不一定经过 leaveEditor，也必须随原生子组件卸载窗口监听。
-      editorView.register(() => editorWindow?.removeEventListener("keydown", handleNativeKeydown, true));
       window.requestAnimationFrame(() => {
         if (editorView && editorView.editor) editorView.editor.focus();
       });
@@ -335,11 +363,43 @@ export function renderTabGroup(
       createFallbackEditor();
     }
 
+    if (codeBody) {
+      languageInput = editorSession.addChild(new CodeLanguageInput(
+        panel, getCodeLanguage(originalContent) || "", plugin.app, context.sourcePath,
+        (nextHighlighting) => {
+          if (highlighting?.language) editorHost.classList.remove("language-" + highlighting.language);
+          highlighting = nextHighlighting;
+          editorHost.classList.add("has-prism-highlighting", "language-" + highlighting.language);
+          const transaction: TransactionSpec = {
+            effects: highlightingSlot.reconfigure(highlighting.extension),
+          };
+          editorView?.editor?.cm?.dispatch(transaction);
+        }
+      ));
+      editorSession.registerDomEvent(languageInput.input, "keydown", (event) => {
+        // 普通 Enter 确认语言并回到正文；保存/取消快捷键沿用整个编辑会话的规则。
+        if (event.key === "Enter" && !event.metaKey && !event.ctrlKey) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (languageInput?.value !== null) {
+            if (editorView?.editor) editorView.editor.focus();
+            else fallbackTextarea?.focus();
+          }
+        }
+      });
+    }
+
+    // 宿主全局 keymap 在窗口捕获阶段拦截 Cmd/Ctrl+Enter，事件不会到达输入框。
+    // 在同一阶段处理快捷键；会话卸载时清理，关闭笔记和禁用插件也不会留下窗口监听。
+    const editorWindow = panel.ownerDocument.defaultView;
+    editorWindow?.addEventListener("keydown", handleSessionKeydown, true);
+    editorSession.register(() => editorWindow?.removeEventListener("keydown", handleSessionKeydown, true));
+
     // 在文档上观察真实移动，面板因布局变化移走后，下一次主动移出仍可触发保存。
     editorSession.registerDomEvent(panel.ownerDocument, "mousemove", handlePointerMove);
   };
 
-  tabs.forEach((tab, index) => {
+  const createTabElements = (tab: TabData, index: number) => {
     const tabId = "code-tab-tab-" + groupSuffix + "-" + index;
     const panelId = "code-tab-panel-" + groupSuffix + "-" + index;
 
@@ -363,7 +423,7 @@ export function renderTabGroup(
       if (event.key === "End") next = tabs.length - 1;
       activate(next, true);
     });
-    tabList.appendChild(button);
+    tabList.insertBefore(button, addButton);
     buttons.push(button);
 
     const panel = document.createElement("div");
@@ -391,7 +451,52 @@ export function renderTabGroup(
       }
       startEditing(index, event);
     });
+  };
+
+  component.registerDomEvent(addButton, "click", async () => {
+    if (addingTab) return;
+    addingTab = true;
+    addButton.disabled = true;
+    const previousIndex = activeIndex;
+    try {
+      if (saveCurrentEditor && !await saveCurrentEditor()) return;
+      // 默认标题避开已有同名标签；空代码块可立即输入，并通过语言框选择着色方式。
+      let number = tabs.length + 1;
+      while (tabs.some((tab) => tab.title === "标签" + number)) number += 1;
+      const tab: TabData = {
+        title: "标签" + number,
+        content: EMPTY_CODE_BLOCK,
+      };
+      const index = tabs.length;
+      // 只在原 source 后追加，保留原标签的格式；仍使用带旧内容检查的安全回写。
+      const nextSource = source + "\n\n" + serializeTabs([tab]);
+      // 宿主可能因文件更新重建组件，先记录选择，让重建后的组件也显示新标签。
+      plugin.activeTabs.set(group.id, index);
+      await updateMarkdownSource(plugin.app, context.sourcePath, group.lineStart, source, nextSource);
+      tabs.push(tab);
+      source = nextSource;
+      if (element.isConnected) {
+        createTabElements(tab, index);
+        activate(index, true);
+        const scrollOptions: ScrollIntoViewOptions = {
+          block: "nearest",
+          inline: "nearest",
+        };
+        buttons[index].scrollIntoView(scrollOptions);
+      }
+    } catch (error) {
+      plugin.activeTabs.set(group.id, previousIndex);
+      console.error("Code Tab: failed to add tab", error);
+      new Notice(error instanceof Error ? error.message : "新增标签失败", 5000);
+    } finally {
+      addingTab = false;
+      addButton.disabled = false;
+    }
   });
 
-  activate(activeIndex);
+  tabs.forEach(createTabElements);
+
+  // 初始化只显示当前可用的标签，不覆盖已经记录的选择。保存后紧接新增时，
+  // 宿主可能先用旧的标签数量重建一次；不能用这次临时的截断索引覆盖新标签索引。
+  activate(activeIndex, false, false);
 }

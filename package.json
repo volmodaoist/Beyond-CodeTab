@@ -9,7 +9,7 @@
         "dev": "node esbuild.config.mjs --watch",
         "typecheck": "tsc --noEmit",
         "test": "node --test tests/*.test.mjs",
-        "test:obsidian": "npm run build && node tests/obsidian/inline-edit.mjs"
+        "test:obsidian": "npm run build && node tests/obsidian/inline-edit.mjs && node tests/obsidian/tab-controls.mjs"
     },
     "devDependencies": {
         "@codemirror/state": "6.5.0",

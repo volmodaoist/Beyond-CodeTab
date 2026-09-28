@@ -31,7 +31,8 @@
     display: none;
 }
 
-.code-tab__tab {
+.code-tab__tab,
+.code-tab__add {
     appearance: none;
     flex: 0 0 auto;
     min-width: 4.25rem;
@@ -52,7 +53,8 @@
     transition: color 120ms ease, background-color 120ms ease;
 }
 
-.code-tab__tab:hover {
+.code-tab__tab:hover,
+.code-tab__add:hover {
     border: 0 !important;
     box-shadow: none !important;
     background: transparent !important;
@@ -78,17 +80,30 @@
     background: var(--code-tab-accent);
 }
 
-.code-tab__tab:focus-visible {
+.code-tab__tab:focus-visible,
+.code-tab__add:focus-visible {
     outline: 2px solid var(--background-modifier-border-focus);
     outline-offset: -4px;
     box-shadow: none !important;
 }
 
-.code-tab__tab:active {
+.code-tab__tab:active,
+.code-tab__add:active {
     border: 0 !important;
     box-shadow: none !important;
     background: transparent !important;
     transform: none !important;
+}
+
+.code-tab__add {
+    min-width: 2.25rem;
+    padding-inline: 0.6rem;
+    font-size: var(--font-ui-large);
+}
+
+.code-tab__add:disabled {
+    cursor: wait;
+    opacity: 0.5;
 }
 
 .code-tab__panels {
@@ -96,12 +111,45 @@
 }
 
 .code-tab__panel {
+    position: relative;
     box-sizing: border-box;
     min-width: 0;
     min-height: 5rem;
     padding: var(--code-tab-panel-padding);
     color: var(--text-normal);
     cursor: text;
+}
+
+/* 语言框占用代码面板底部已有的留白，不改变进入编辑前后的卡片尺寸。
+   它是面板内的兄弟元素，操作时不会被当成移出面板而触发自动保存。 */
+.code-tab__panel .code-tab__language-input {
+    position: absolute;
+    inset-inline-end: 1.25rem;
+    bottom: 2px;
+    box-sizing: border-box;
+    width: 9rem;
+    max-width: calc(100% - 2rem);
+    height: 1rem;
+    padding: 0 0.35rem;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 3px;
+    background: var(--background-primary);
+    color: var(--text-muted);
+    font-family: var(--font-monospace);
+    font-size: 11px;
+    text-align: end;
+    box-shadow: none;
+}
+
+.code-tab__panel .code-tab__language-input:focus {
+    border-color: var(--interactive-accent);
+    color: var(--text-normal);
+    outline: none;
+    box-shadow: none;
+}
+
+.code-tab__panel .code-tab__language-input[aria-invalid="true"] {
+    border-color: var(--text-error);
 }
 
 .code-tab__panel[hidden] {
@@ -128,6 +176,8 @@
 .code-tab__panel pre code {
     /* 使用独立行盒，避免 pre 的默认字号/基线影响正文位置。 */
     display: block;
+    /* 新标签的空代码块也保留一行，点击开始输入时无需突然增高。 */
+    min-height: 1.7em;
     line-height: 1.7;
     white-space: pre-wrap;
     word-break: break-all;
