@@ -9,7 +9,7 @@
 ```bash
 npm ci
 npm test                    # 解析、回写、围栏保护和高亮等单元测试
-npm run test:obsidian        # 先构建，再运行两组真实 Obsidian 界面测试
+npm run test:obsidian        # 先构建，再运行三组真实 Obsidian 界面测试
 ```
 
 默认隐藏独立测试窗口。需要观察点击、输入和切换用例的过程时：
@@ -25,7 +25,18 @@ npm run build
 node tests/obsidian/inline-edit.mjs
 # 或运行标签栏和语言框的测试
 node tests/obsidian/tab-controls.mjs
+# 或运行表格、Markdown 转换与嵌入测试
+node tests/obsidian/markdown-content.mjs
 ```
+
+如果本机已有 Excalidraw，可把插件目录传给测试，验证真实画布嵌入：
+
+```bash
+CODE_TAB_EXCALIDRAW_PLUGIN='/你的仓库/.obsidian/plugins/obsidian-excalidraw-plugin' \
+  node tests/obsidian/markdown-content.mjs
+```
+
+测试只把 `main.js`、`styles.css`、`manifest.json` 复制到临时仓库，并创建一张自己的测试画布。未设置该变量时只跳过 Excalidraw 用例，普通嵌入仍会验证。
 
 ## 脚本分工与产物
 
@@ -34,9 +45,11 @@ node tests/obsidian/tab-controls.mjs
 | [obsidian/host.mjs](obsidian/host.mjs) | 创建临时仓库，安装当前构建产物，启动本机 Obsidian，通过 Playwright 连接调试端口，结束后关闭测试进程 |
 | [obsidian/inline-edit.mjs](obsidian/inline-edit.mjs) | 点击前后尺寸及逐字符高亮、回车/粘贴、自然增高/收缩、撤销/重做、保存/取消、围栏保护及降级输入 |
 | [obsidian/tab-controls.mjs](obsidian/tab-controls.mjs) | 加号与中英文标签的对齐、新增标签、语言输入与即时高亮、重复点击和写入失败处理 |
+| [obsidian/markdown-content.mjs](obsidian/markdown-content.mjs) | 表格及逐单元格尺寸、保存/取消、Markdown 类型转换、第三方处理器和原生嵌入；可选真实 Excalidraw |
+| [fixtures/table.md](fixtures/table.md) | 中文长文本与行内代码混合的表格，用于重现点击后的上下位移 |
 | 本目录中的 `*.test.mjs` | 无需启动 Obsidian 的解析、数据回写和编辑器逻辑测试 |
 
-两组界面测试分别启动一个临时 Obsidian 进程，在同一进程中依次切换阅读视图、实时预览、明暗主题和窗口宽度。这就是可见模式下会看到多种用例反复切换的原因。测试使用临时笔记，日常仓库中的内容不参与运行。
+三组界面测试分别启动一个临时 Obsidian 进程，在同一进程中依次切换阅读视图、实时预览、明暗主题和窗口宽度。这就是可见模式下会看到多种用例反复切换的原因。测试使用临时笔记，日常仓库中的内容不参与运行。
 
 每组测试会打印 `Artifacts: .../code-tab-e2e-...`。该目录保留截图、`report.json`、`obsidian.log` 和测试仓库中的 Markdown；失败时另存 `failure.png`。对齐测试还会保存宽、窄窗口下标签组件的局部截图。
 
@@ -54,7 +67,7 @@ node tests/obsidian/tab-controls.mjs
 | `code-tab-add` | 新增标签按钮 |
 | `code-tab-panel` | 单个标签内容面板 |
 | `code-tab-editor` | 编辑态的编辑器容器 |
-| `code-tab-language` | 编程语言输入框 |
+| `code-tab-language` | 渲染类型输入框（沿用已有标识，支持 Markdown、代码语言和插件类型名） |
 | `code-tab-fallback` | 原生编辑器不可用时的 textarea |
 
 例如，用 Playwright 定位当前可见的第一个标签组件：

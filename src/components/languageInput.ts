@@ -1,71 +1,32 @@
-import { Component, loadPrism, MarkdownRenderer } from "obsidian";
-import type { App } from "obsidian";
-import { normalizePreviewFenceLanguages } from "../markdown";
-import { codeHighlighting } from "./codeHighlighting";
-import type { CodeHighlighting } from "./codeHighlighting";
+import { Component } from "obsidian";
 import { normalizeCodeLanguage } from "./codeLanguage";
 
-/**
- * 语言输入只维护本次编辑的选择；保存层负责写回围栏。
- * 高亮准备通过宿主渲染器加载语法，因此尚未在笔记中使用过的语言也能立即着色。
- */
-export class CodeLanguageInput extends Component {
+/** 只负责类型输入与校验。预览、着色和保存由编辑会话处理，不在输入事件中渲染临时文档。 */
+export class RenderTypeInput extends Component {
   readonly input: HTMLInputElement;
-  private revision = 0;
   private timer: number | undefined;
-  private disposed = false;
 
-  constructor(
-    panel: HTMLElement,
-    initialLanguage: string,
-    app: App,
-    sourcePath: string,
-    applyHighlighting: (highlighting: CodeHighlighting) => void
-  ) {
+  constructor(panel: HTMLElement, initialType: string, onChange: (renderType: string) => void) {
     super();
     this.input = panel.ownerDocument.createElement("input");
     this.input.className = "code-tab__language-input";
     this.input.setAttribute("data-testid", "code-tab-language");
     this.input.type = "text";
-    this.input.value = initialLanguage;
+    this.input.value = initialType;
     this.input.placeholder = "text";
     this.input.spellcheck = false;
-    this.input.setAttribute("aria-label", "编程语言");
-    this.input.title = "编程语言，如 python、javascript、c++；留空使用 text";
+    this.input.setAttribute("aria-label", "渲染类型");
+    this.input.title = "渲染类型，如 markdown、python、mermaid；支持已安装插件的类型名";
     panel.appendChild(this.input);
 
-    const prepareHighlighting = async (language: string, revision: number) => {
-      const preview = panel.ownerDocument.createElement("div");
-      const renderSession = this.addChild(new Component());
-      try {
-        // 不插入页面，避免临时预览改变卡片尺寸。使用规范别名，但保存用户选择的语言名。
-        const source = normalizePreviewFenceLanguages("```" + language + "\n\n```");
-        await MarkdownRenderer.render(app, source, preview, sourcePath, renderSession);
-        const prism = await loadPrism();
-        const canonicalLanguage = source.split("\n")[0].slice(3);
-        // 连续输入时异步加载可能乱序；退出会话或已有新输入后不再应用旧结果。
-        if (!this.disposed && revision === this.revision) {
-          applyHighlighting(codeHighlighting(prism, canonicalLanguage));
-        }
-      } catch (error) {
-        if (!this.disposed && revision === this.revision) {
-          console.warn("Code Tab: failed to load language highlighting", error);
-        }
-      } finally {
-        this.removeChild(renderSession);
-      }
-    };
-
     this.registerDomEvent(this.input, "input", () => {
-      const language = this.value;
-      this.input.setAttribute("aria-invalid", String(language === null));
-      const revision = ++this.revision;
+      const renderType = this.value;
+      this.input.setAttribute("aria-invalid", String(renderType === null));
       window.clearTimeout(this.timer);
-      // 合并连续键入，避免每输入一个字母就请求一套宿主语法。
-      if (language !== null) this.timer = window.setTimeout(() => prepareHighlighting(language, revision), 180);
+      // 连续输入合并为一次着色更新；真正写回 Markdown 只发生在保存时。
+      if (renderType !== null) this.timer = window.setTimeout(() => onChange(renderType), 180);
     });
     this.register(() => {
-      this.disposed = true;
       window.clearTimeout(this.timer);
       this.input.remove();
     });

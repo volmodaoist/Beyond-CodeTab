@@ -80,16 +80,18 @@ export async function launchTestVault(initialMarkdown) {
     }
     const trust = page.getByText(/^(信任仓库作者并启用插件|Trust author and enable plugins)$/);
     await trust.click();
-    await page.waitForFunction(() => app.plugins.plugins["obsidian-code-tab"]);
 
     // 只观察插件创建的真实 embed，不替换 MarkdownRenderer、CodeMirror 或 Vault。
-    await page.evaluate(() => {
+    // 首次启动偶尔会重载页面；waitForFunction 跨导航重试，且等工作区就绪后才安装观察器。
+    await page.waitForFunction(() => {
+      if (!window.app?.workspace?.layoutReady || !app.plugins.plugins["obsidian-code-tab"]) return false;
       const registry = app.embedRegistry;
       const original = registry.getEmbedCreator;
       registry.getEmbedCreator = function (...args) {
         const create = original.apply(this, args);
         return (...params) => (window.codeTabTestEmbed = create(...params));
       };
+      return true;
     });
     return { page, directory, vault, close };
   } catch (error) {

@@ -202,37 +202,41 @@
 }
 
 .code-tab__panel.is-restoring {
-    /* 只在卸载编辑器到异步预览完成之间保持高度，防止内容短暂塌陷。 */
+    /* 只在预览/编辑器交接时保持高度，防止 DOM 暂时为空导致整页滚动位置被裁短。 */
     min-height: var(--code-tab-restore-height);
 }
 
 .code-tab__native-editor {
+    --code-tab-editor-background: transparent;
     box-sizing: border-box;
     width: 100%;
     height: auto;
     min-width: 0;
     min-height: 0;
-    overflow: hidden;
     border-radius: var(--code-tab-radius);
-    background: var(--code-background);
+    background: var(--code-tab-editor-background);
 }
 
-/* 宿主可能把 markdown-embed 类直接加到 editorHost 上；去掉引用线，保留代码框背景。 */
+.code-tab__native-editor.is-code-content {
+    --code-tab-editor-background: var(--code-background);
+}
+
+/* 只清理当前 embed 的外壳；正文里的笔记、画布和表格单元格保留自己的布局。 */
 .code-tab__native-editor.markdown-embed {
     border: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
-    border-radius: var(--code-tab-radius);
-    background: var(--code-background);
+    background: var(--code-tab-editor-background);
 }
 
-/* 原生 Markdown embed 默认按整页排版，这里只保留 CodeMirror 编辑器本身。 */
-.code-tab__native-editor .markdown-embed,
-.code-tab__native-editor .markdown-embed-content,
-.code-tab__native-editor .markdown-source-view,
-.code-tab__native-editor .cm-editor,
-.code-tab__native-editor .cm-scroller {
+.code-tab__native-editor > .markdown-embed-content,
+.code-tab__native-editor > .markdown-embed-content > .markdown-source-view,
+.code-tab__native-editor .code-tab__cm-root,
+.code-tab__native-editor .code-tab__cm-scroller {
     box-sizing: border-box;
+    width: 100%;
+    height: auto !important;
+    max-height: none !important;
     min-width: 0;
     min-height: 0 !important;
     margin: 0 !important;
@@ -243,36 +247,21 @@
     box-shadow: none !important;
 }
 
-.code-tab__native-editor .markdown-embed,
-.code-tab__native-editor .markdown-embed-content,
-.code-tab__native-editor .markdown-source-view,
-.code-tab__native-editor .cm-editor,
-.code-tab__native-editor .cm-scroller {
-    width: 100%;
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible;
-}
-
-.code-tab__native-editor .cm-scroller {
-    /* 和笔记中的原生代码块一样由整页滚动，编辑器不建立内部滚动视口。 */
+.code-tab__native-editor .code-tab__cm-scroller {
+    /* 由笔记整页滚动；正文增加行时编辑器自然增高。 */
     overflow: visible !important;
     scrollbar-gutter: auto !important;
-    scrollbar-width: thin;
 }
 
-.code-tab__native-editor .markdown-embed-title,
-.code-tab__native-editor .markdown-embed-link,
-.code-tab__native-editor .markdown-embed-link-icon,
-.code-tab__native-editor .inline-title,
-.code-tab__native-editor .metadata-container,
-.code-tab__native-editor .view-header {
-    /* 原生 embed 也会创建空标题和属性区；空标题仍有行高和外边距，必须移除占位。 */
+.code-tab__native-editor > .markdown-embed-title,
+.code-tab__native-editor > .markdown-embed-link,
+.code-tab__native-editor .code-tab__cm-sizer > .inline-title,
+.code-tab__native-editor .code-tab__cm-sizer > .metadata-container {
     display: none !important;
 }
 
-.code-tab__native-editor .cm-sizer {
-    /* Obsidian 会以内联样式给整页编辑器添加上下留白，短代码块不需要这些空间。 */
+.code-tab__native-editor .code-tab__cm-sizer {
+    /* 原生整页编辑器带内联留白，只对已标记的外层 sizer 清零。 */
     min-height: 0 !important;
     width: 100% !important;
     max-width: none !important;
@@ -280,55 +269,74 @@
     padding: 0 !important;
 }
 
-.code-tab__native-editor .cm-contentContainer {
+.code-tab__native-editor .code-tab__cm-container {
     padding: 0 !important;
 }
 
-.code-tab__native-editor .cm-content {
+.code-tab__native-editor .code-tab__cm-content {
     min-height: 0 !important;
     max-width: none !important;
+    padding: 0 !important;
+    font: inherit;
+    caret-color: var(--text-accent);
+}
+
+/* 单代码块才使用等宽字体与代码内边距。表格单元格也是 CodeMirror，不能用 .cm-content 泛匹配。 */
+.code-tab__native-editor.is-code-content .code-tab__cm-content {
     padding: var(--code-tab-code-padding) !important;
     font-family: var(--font-monospace);
     font-size: var(--code-size);
     line-height: 1.7;
-    caret-color: var(--text-accent);
 }
 
-.code-tab__native-editor .cm-line {
+.code-tab__native-editor .code-tab__cm-content > .cm-line {
     /* 行内代码块原有的左缩进与 cm-content 的 padding 重复，只保留一层。 */
     padding-inline: 0 !important;
     max-width: none !important;
 }
 
-.code-tab__native-editor .cm-line.HyperMD-codeblock {
-    /* cm-content 已使用代码字号；宿主的 --code-size 通常是相对值（如 0.875em）。
+.code-tab__native-editor.is-code-content .code-tab__cm-content > .cm-line.HyperMD-codeblock {
+    /* 外层已应用代码字号；宿主的 --code-size 通常是相对值（如 0.875em）。
        若 HyperMD 行再应用一次，14px 会变成 12.25px，点击后文字和行高都会收缩。 */
     font-size: inherit !important;
     line-height: inherit !important;
-    /* 与预览使用相同的代码换行规则。允许直接折行，避免隐藏围栏的零宽占位符
-       被浏览器当成首行内容，把整段长代码挤到下一行。 */
+    /* 与预览使用相同的代码换行规则，避免隐藏围栏的零宽占位符把长代码挤到下一行。 */
     white-space: pre-wrap !important;
     word-break: break-all !important;
 }
 
-.code-tab__native-editor .cm-gutters {
+.code-tab__native-editor .code-tab__cm-scroller > .cm-gutters {
     display: none !important;
 }
 
-/* 原生编辑器继续负责输入，但正文只使用与预览相同的 Prism token 着色。
-   清除宿主在外层 span 上的语法颜色，避免未被 Prism 标记的普通字符沿用另一套颜色。 */
-.code-tab__native-editor.has-prism-highlighting .cm-content {
+/* 正文只使用与预览相同的 Prism token 着色，普通字符不沿用另一套语法颜色。 */
+.code-tab__native-editor.has-prism-highlighting .code-tab__cm-content {
     color: var(--code-normal);
 }
 
-.code-tab__native-editor.has-prism-highlighting .cm-line span:not(.code-tab__syntax) {
+.code-tab__native-editor.has-prism-highlighting .code-tab__cm-content > .cm-line span:not(.code-tab__syntax) {
     color: inherit !important;
     font-weight: inherit !important;
     font-style: inherit !important;
 }
 
-.code-tab__native-editor .cm-focused {
+.code-tab__native-editor .code-tab__cm-root.cm-focused {
     outline: none !important;
+}
+
+/* 表格的拖拽控件使用面板原有的留白，避免 widget 再添加一圈 16px 的空间。 */
+.code-tab__native-editor.is-markdown-content .code-tab__cm-content > .cm-table-widget {
+    /* 用负 margin 抵消控件留白，表格正文仍与预览对齐；保留窄窗口下的横向滚动。 */
+    margin: -16px !important;
+    padding: 16px !important;
+}
+
+/* 宿主在表格前后放置空光标行。焦点位于单元格时不让这些定位行撑高表格；
+   键盘离开单元格、回到正文编辑器时恢复行盒，仍可在表格前后输入文字。 */
+.code-tab__native-editor.is-markdown-content .code-tab__cm-root:not(.cm-focused) .code-tab__cm-content > .cm-line:first-child:has(> br:only-child):has(+ .cm-table-widget),
+.code-tab__native-editor.is-markdown-content .code-tab__cm-root:not(.cm-focused) .code-tab__cm-content > .cm-table-widget + .cm-line:last-child:has(> br:only-child) {
+    min-height: 0;
+    line-height: 0;
 }
 
 .code-tab__fallback-editor {
@@ -341,17 +349,21 @@
     resize: none;
     overflow: hidden;
     margin: 0;
-    padding: var(--code-tab-code-padding);
+    padding: 0;
     border: 0;
     border-radius: var(--code-tab-radius);
     outline: 0;
-    background: var(--code-background);
+    background: var(--code-tab-editor-background);
     color: var(--text-normal);
     caret-color: var(--text-accent);
     font-family: var(--font-monospace);
     font-size: var(--code-size);
     line-height: 1.7;
     tab-size: 4;
+}
+
+.code-tab__native-editor.is-code-content .code-tab__fallback-editor {
+    padding: var(--code-tab-code-padding);
 }
 
 .code-tab.is-editing .code-tab__tab {
