@@ -242,16 +242,22 @@ obsidian-code-tab/
 │   ├── main.ts                    # 插件注册、命令和标签选中状态
 │   ├── markdown.ts                # 标签解析、序列化和源文件回写
 │   ├── components/
-│   │   ├── tabGroup.ts            # 标签切换、新增及保存/取消协调
-│   │   ├── tabContent.ts          # 内容分类与 Markdown/代码格式转换
-│   │   ├── tabPreview.ts          # 宿主预览渲染与 Prism 语法加载
-│   │   ├── tabEditor.ts           # 一次编辑会话、输入事件及资源释放
-│   │   ├── codeBlockEditor.ts     # 单代码块正文识别、围栏折叠和编辑边界保护
-│   │   ├── codeHighlighting.ts    # 共用预览 Prism 语法的 CodeMirror 着色装饰
-│   │   ├── codeLanguage.ts        # 单代码块语言名校验与无损替换
-│   │   ├── languageInput.ts       # 渲染类型输入、校验和防抖通知
-│   │   └── types.ts               # 标签数据与私有 embed API 类型
-│   └── styles.css                 # 标签、预览和原生编辑器样式
+│   │   ├── MultiTab/             # 标签组件：标题、预览、Markdown 编辑和保存
+│   │   │   ├── index.ts          # 对外入口
+│   │   │   ├── tabGroup.ts       # 标签切换、新增及保存/取消协调
+│   │   │   ├── tabContent.ts     # 内容分类与 Markdown/代码格式转换
+│   │   │   ├── tabPreview.ts     # 宿主预览与语法加载
+│   │   │   ├── tabEditor.ts      # 临时 Markdown 编辑会话
+│   │   │   ├── renderTypeInput.ts # 渲染类型输入
+│   │   │   ├── types.ts          # 标签数据与原生 embed 类型
+│   │   │   └── styles.css        # 标签、面板、Markdown 编辑器样式
+│   │   └── CodeBlockEditor/      # 单代码块编辑能力
+│   │       ├── index.ts          # 对外入口
+│   │       ├── fences.ts         # 正文范围、围栏折叠与编辑边界
+│   │       ├── highlighting.ts   # Prism 着色装饰
+│   │       ├── language.ts       # 类型名校验与围栏语言替换
+│   │       └── styles.css        # 代码预览和编辑的共享样式
+│   └── styles.css               # 汇总组件 CSS，由 esbuild 打包
 ├── tests/
 │   ├── markdown.test.mjs          # 解析和文件回写回归测试
 │   ├── code-block-editor.test.mjs # 正文范围、围栏折叠和编辑边界回归测试
@@ -282,6 +288,8 @@ obsidian-code-tab/
 | `npm ci` | 首次开发或依赖锁文件更新后安装依赖 | 按 `package-lock.json` 安装到 `node_modules/` |
 | `npm run dev` | 开发时持续监听源码、样式和清单变化 | 自动更新 `dist/`，按 `Ctrl + C` 停止 |
 | `npm run typecheck` | 单独检查 TypeScript 类型 | 在终端报告类型错误，不生成产物 |
+| `npm run lint` | 检查 TypeScript/JavaScript 规则与格式 | 禁止单行分支、压缩函数体和单行对象属性 |
+| `npm run lint:fix` | 自动修复 lint 与格式问题 | 用 ESLint 和 Prettier 统一多行风格 |
 | `npm test` | 运行解析和文件回写回归测试 | 在终端显示测试结果，不打开界面 |
 | `npm run test:obsidian` | 在本机 Obsidian 中自动运行交互回归 | 启动独立临时仓库，检查布局、输入及文件回写，输出截图和报告目录 |
 | `npm run build` | 检查类型并生成插件安装文件 | 生成 `dist/main.js`、`dist/manifest.json` 和 `dist/styles.css` |
@@ -296,8 +304,10 @@ npm run dev
 完成修改后，在另一个终端运行以下命令；也可以先停止监听再执行：
 
 ```bash
-npm test && npm run build
+npm run lint && npm test && npm run build
 ```
+
+`npm ci` 会安装本地 pre-commit hook，每次 `git commit` 自动运行 `npm run lint`。不覆盖 Trae 的托管 hook；它会继续调用本仓库的检查。新增组件时把样式放在组件目录，并由根 `src/styles.css` 导入，监听模式会自动追踪这些导入。
 
 `npm run build` 已包含 TypeScript 类型检查，`npm run dev` 不做类型检查。构建与监听都只更新本仓库的 `dist/`，不会自动复制到 Obsidian 插件目录，也不会自动重新加载插件。
 
@@ -307,7 +317,7 @@ npm test && npm run build
 
 当前仓库没有独立的浏览器预览页面。`npm run dev` 只启动构建监听，不会启动 HTTP 服务、输出 `localhost` 预览地址或打开前端页面。`dist/main.js` 是由 Obsidian 加载的插件入口，运行时依赖 Obsidian 提供的 API，不能通过直接打开文件或执行 `node dist/main.js` 来预览。
 
-只安装 Node.js 时，可以运行 `npm test && npm run build`，验证以下内容：
+只安装 Node.js 时，可以运行 `npm run lint && npm test && npm run build`，验证以下内容：
 
 - TypeScript 类型正确，源码可以打包生成插件产物。
 - 标签解析、嵌套代码块、空标题和预览语言别名符合预期。

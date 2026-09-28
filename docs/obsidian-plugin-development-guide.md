@@ -152,7 +152,7 @@ tab: JavaScript
 ]
 ```
 
-对应的数据类型定义在 [src/components/types.ts](../src/components/types.ts)：
+对应的数据类型定义在 [src/components/MultiTab/types.ts](../src/components/MultiTab/types.ts)：
 
 ```ts
 export interface TabData {
@@ -181,7 +181,7 @@ tab: 说明
 
 ## 5. 从数据到 DOM 和交互
 
-界面逻辑集中在 [src/components/tabGroup.ts](../src/components/tabGroup.ts) 的 `renderTabGroup()` 中。它依次完成：
+界面逻辑集中在 [src/components/MultiTab/tabGroup.ts](../src/components/MultiTab/tabGroup.ts) 的 `renderTabGroup()` 中。它依次完成：
 
 1. 解析标签数据，获取来源文件和代码块行号。
 2. 创建标签栏与内容面板容器。
@@ -209,7 +209,7 @@ button.textContent = tab.title;
 - `aria-selected`、`tabindex` 等辅助访问属性。
 - 各面板的 `hidden` 状态。
 
-因此切换标签不用重新解析整个文件，也不需要写文件。[src/styles.css](../src/styles.css) 中的 `.code-tab__panel[hidden]` 配合这个状态隐藏非活动面板。
+因此切换标签不用重新解析整个文件，也不需要写文件。[MultiTab/styles.css](../src/components/MultiTab/styles.css) 中的 `.code-tab__panel[hidden]` 配合这个状态隐藏非活动面板。
 
 方向键、`Home` 和 `End` 也会调用 `activate()`，从而复用同一套切换逻辑。
 
@@ -364,7 +364,7 @@ const embedCreator = embedRegistry.getEmbedCreator({ extension: "md" });
 
 随后创建实例、登记到父组件、启用编辑，并调用 `showEditor()`。这样可以复用 Obsidian 的输入、光标、选区和语法高亮能力。
 
-`embedRegistry` 及相关 embed 行为不属于本插件可依赖的公开稳定契约。[types.ts](../src/components/types.ts) 中的 `AppWithEmbedRegistry`、`NativeMarkdownEmbed` 是项目为实际使用的部分补充的类型声明。**补充类型不会让内部接口变成公开 API。**
+`embedRegistry` 及相关 embed 行为不属于本插件可依赖的公开稳定契约。[types.ts](../src/components/MultiTab/types.ts) 中的 `AppWithEmbedRegistry`、`NativeMarkdownEmbed` 是项目为实际使用的部分补充的类型声明。**补充类型不会让内部接口变成公开 API。**
 
 因此代码会检测编辑器是否可用，失败时创建可见的 `textarea`，继续提供基本编辑和保存能力。原生编辑器只在需要时创建，退出编辑后即卸载。
 
@@ -376,8 +376,8 @@ const embedCreator = embedRegistry.getEmbedCreator({ extension: "md" });
 | --- | --- | --- |
 | 1 | [manifest.json](../manifest.json)、[package.json](../package.json)、[esbuild.config.mjs](../esbuild.config.mjs) | 什么代码被构建，什么文件被 Obsidian 加载？ |
 | 2 | [main.ts](../src/main.ts) 的 `onload()` | 代码块处理器和命令分别在什么时候执行？ |
-| 3 | [types.ts](../src/components/types.ts) 的 `TabData`、[markdown.ts](../src/markdown.ts) 的 `parseTabs()` | 原始文本怎样变成结构化数据？ |
-| 4 | [tabGroup.ts](../src/components/tabGroup.ts) 的 DOM 创建、`activate()`、`renderPanel()` | 数据怎样变成可切换界面？ |
+| 3 | [types.ts](../src/components/MultiTab/types.ts) 的 `TabData`、[markdown.ts](../src/markdown.ts) 的 `parseTabs()` | 原始文本怎样变成结构化数据？ |
+| 4 | [tabGroup.ts](../src/components/MultiTab/tabGroup.ts) 的 DOM 创建、`activate()`、`renderPanel()` | 数据怎样变成可切换界面？ |
 | 5 | 同文件的 `startEditing()`、`save()`、`leaveEditor()` | 编辑会话如何开始、保存、取消和结束？ |
 | 6 | [markdown.ts](../src/markdown.ts) 的 `serializeTabs()`、`updateMarkdownSource()`、`findTabBlock()`、`createTabFence()` | 怎样定位原块，避免覆盖已经改变的内容？ |
 | 7 | [styles.css](../src/styles.css)、[markdown.test.mjs](../tests/markdown.test.mjs) | 样式怎样适应主题，哪些文本行为已有自动检查？ |

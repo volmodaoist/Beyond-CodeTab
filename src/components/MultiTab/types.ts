@@ -44,9 +44,8 @@ export interface MarkdownEmbedContext {
 
 export interface AppWithEmbedRegistry extends App {
   embedRegistry?: {
-    getEmbedCreator(options: MarkdownEmbedOptions): ((
-      context: MarkdownEmbedContext,
-      file: null
-    ) => NativeMarkdownEmbed) | undefined;
+    getEmbedCreator(
+      options: MarkdownEmbedOptions,
+    ): ((context: MarkdownEmbedContext, file: null) => NativeMarkdownEmbed) | undefined;
   };
 }

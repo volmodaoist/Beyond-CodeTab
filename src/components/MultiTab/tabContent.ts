@@ -1,6 +1,6 @@
-import { findCodeBlockBody } from "./codeBlockEditor";
-import type { CodeBlockBody } from "./codeBlockEditor";
-import { getCodeLanguage, replaceCodeLanguage } from "./codeLanguage";
+import { findCodeBlockBody } from "../CodeBlockEditor";
+import type { CodeBlockBody } from "../CodeBlockEditor";
+import { getCodeLanguage, replaceCodeLanguage } from "../CodeBlockEditor";
 
 export interface TabContent {
   /** 笔记中保存的原文，用于保留围栏与附加信息。 */
@@ -44,18 +44,24 @@ export function writeTabContent(content: TabContent, edited: string, renderType:
   if (isMarkdownType(renderType)) {
     // 已有 Markdown 围栏且类型未改时保留原有格式；代码切换到 Markdown 时释放外层围栏。
     if (content.kind === "markdown" && content.body && renderType === content.renderType) {
-      return content.source.slice(0, content.body.from) + text + content.source.slice(content.body.to);
+      return (
+        content.source.slice(0, content.body.from) + text + content.source.slice(content.body.to)
+      );
     }
     return text;
   }
   if (content.kind === "code" && body) {
-    if (renderType === content.renderType) return edited;
+    if (renderType === content.renderType) {
+      return edited;
+    }
     return replaceCodeLanguage(edited, renderType);
   }
 
   // Markdown 切换到代码时，围栏必须长于正文中的反引号，避免嵌套内容提前关闭新围栏。
   let length = 3;
-  for (const marks of text.match(/^ {0,3}`+/gm) || []) length = Math.max(length, marks.trim().length + 1);
+  for (const marks of text.match(/^ {0,3}`+/gm) || []) {
+    length = Math.max(length, marks.trim().length + 1);
+  }
   const fence = "`".repeat(length);
   return fence + renderType + "\n" + text + "\n" + fence;
 }

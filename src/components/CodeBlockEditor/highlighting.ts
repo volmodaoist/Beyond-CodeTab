@@ -3,7 +3,7 @@ import type { Extension, Range } from "@codemirror/state";
 import { Decoration, EditorView } from "@codemirror/view";
 import type { DecorationSet } from "@codemirror/view";
 import type * as Prism from "prismjs";
-import { findCodeBlockBody } from "./codeBlockEditor";
+import { findCodeBlockBody } from "./fences";
 
 export interface CodeHighlighting {
   language: string;
@@ -26,7 +26,9 @@ export function codeHighlighting(prism: typeof Prism, language: string): CodeHig
   const highlight = (source: string): DecorationSet => {
     const body = findCodeBlockBody(source);
     const grammar = prism.languages[language];
-    if (!body || !grammar) return Decoration.none;
+    if (!body || !grammar) {
+      return Decoration.none;
+    }
 
     const environment: TokenizationEnvironment = {
       code: source.slice(body.from, body.to),
@@ -40,10 +42,14 @@ export function codeHighlighting(prism: typeof Prism, language: string): CodeHig
 
     const ranges: Range<Decoration>[] = [];
     const visit = (token: Prism.TokenStream, from: number): number => {
-      if (typeof token === "string") return from + token.length;
+      if (typeof token === "string") {
+        return from + token.length;
+      }
       if (Array.isArray(token)) {
         let offset = from;
-        for (const child of token) offset = visit(child, offset);
+        for (const child of token) {
+          offset = visit(child, offset);
+        }
         return offset;
       }
 

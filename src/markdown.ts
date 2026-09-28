@@ -1,5 +1,5 @@
 import type { App, TAbstractFile, TFile } from "obsidian";
-import type { TabBlock, TabData } from "./components/types";
+import type { TabBlock, TabData } from "./components/MultiTab/types";
 
 // 单行围栏的解析结果；是否构成结束围栏，由调用方结合起始围栏判断。
 interface FenceLine {
@@ -41,14 +41,16 @@ export function parseTabs(source: string): TabData[] {
   for (let i = 0; i < lines.length;) {
     // 当有标签声明时，从下一行开始收集正文；声明前的说明也通过下面的循环扫描。
     const tabMatch = lines[i].match(tabPattern);
-    if (tabMatch) i++;
+    if (tabMatch) {
+      i++;
+    }
     const bg = i;
     // 当前标签一直延续到代码块外的下一条 tab: 声明，或者 source 末尾。
     // 段落、列表、引用等普通 Markdown 逐行前进，内层代码块则整块前进。
     while (i < lines.length && !tabPattern.test(lines[i])) {
       const opening = parseFenceLine(lines[i]);
       i++;
-       // 普通正文已经处理完一行，继续寻找标签边界。
+      // 普通正文已经处理完一行，继续寻找标签边界。
       if (!opening) {
         continue;
       }
@@ -57,7 +59,12 @@ export function parseTabs(source: string): TabData[] {
       while (i < lines.length) {
         const closing = parseFenceLine(lines[i]);
         i++;
-        if (closing && closing.marker === opening.marker && closing.length >= opening.length && closing.suffix.trim() === "") {
+        if (
+          closing &&
+          closing.marker === opening.marker &&
+          closing.length >= opening.length &&
+          closing.suffix.trim() === ""
+        ) {
           // i 已指向结束围栏的下一行，接着扫描普通正文或下一条标签声明。
           break;
         }
@@ -83,16 +90,17 @@ export function parseTabs(source: string): TabData[] {
   return tabs;
 }
 
-
-
 function trimBlankLines(lines: string[]): string[] {
   let start = 0;
   let end = lines.length;
-  while (start < end && lines[start].trim() === "") start += 1;
-  while (end > start && lines[end - 1].trim() === "") end -= 1;
+  while (start < end && lines[start].trim() === "") {
+    start += 1;
+  }
+  while (end > start && lines[end - 1].trim() === "") {
+    end -= 1;
+  }
   return lines.slice(start, end);
 }
-
 
 export function normalizeNewlines(value: string): string {
   // 内部统一按 LF 计算；真正回写时会恢复源文件原本的换行风格。
@@ -110,19 +118,24 @@ export function normalizePreviewFenceLanguages(markdown: string): string {
 
   return normalizeNewlines(markdown)
     .split("\n")
-    .map((line) => line.replace(
-      /^( {0,3}[\x60~]{3,}\s*)(c\+\+|c#)(?=\s|$)(.*)$/i,
-      (_match: string, prefix: string, language: string, suffix: string) => prefix + aliases[language.toLowerCase()] + suffix
-    ))
+    .map((line) =>
+      line.replace(
+        /^( {0,3}[\x60~]{3,}\s*)(c\+\+|c#)(?=\s|$)(.*)$/i,
+        (_match: string, prefix: string, language: string, suffix: string) =>
+          prefix + aliases[language.toLowerCase()] + suffix,
+      ),
+    )
     .join("\n");
 }
 
 export function serializeTabs(tabs: TabData[]): string {
   // tab: 声明之间固定留一个空行，输出稳定，后续 diff 更容易阅读。
-  return tabs.map((tab) => {
-    const header = "tab: " + tab.title;
-    return tab.content ? header + "\n" + tab.content : header;
-  }).join("\n\n");
+  return tabs
+    .map((tab) => {
+      const header = "tab: " + tab.title;
+      return tab.content ? header + "\n" + tab.content : header;
+    })
+    .join("\n\n");
 }
 
 function isMarkdownFile(file: TAbstractFile | null): file is TFile {
@@ -130,7 +143,11 @@ function isMarkdownFile(file: TAbstractFile | null): file is TFile {
 }
 
 export async function updateMarkdownSource(
-  app: App, sourcePath: string, expectedLine: number, previousSource: string, nextSource: string
+  app: App,
+  sourcePath: string,
+  expectedLine: number,
+  previousSource: string,
+  nextSource: string,
 ): Promise<void> {
   const file = app.vault.getAbstractFileByPath(sourcePath);
   if (!isMarkdownFile(file)) {
@@ -141,7 +158,9 @@ export async function updateMarkdownSource(
   const update = (fileContent: string) => {
     // 同一笔记可能有多个 tab 块：先匹配旧内容，再用原行号选取距离最近的那个。
     const block = findTabBlock(fileContent, previousSource, expectedLine);
-    if (!block) return fileContent;
+    if (!block) {
+      return fileContent;
+    }
     replaced = true;
     const replacement = createTabFence(nextSource, block.marker, block.indent, block.newline);
     return fileContent.slice(0, block.start) + replacement + fileContent.slice(block.end);
@@ -154,7 +173,9 @@ export async function updateMarkdownSource(
     // 兼容没有 vault.process 的旧版本 Obsidian。
     const current = await app.vault.read(file);
     const updated = update(current);
-    if (updated !== current) await app.vault.modify(file, updated);
+    if (updated !== current) {
+      await app.vault.modify(file, updated);
+    }
   }
 
   if (!replaced) {
@@ -163,7 +184,9 @@ export async function updateMarkdownSource(
 }
 
 export function findTabBlock(
-  fileContent: string, expectedSource: string, expectedLine: number
+  fileContent: string,
+  expectedSource: string,
+  expectedLine: number,
 ): TabBlock | null {
   // 保留 CRLF/LF，否则仅编辑一个标签也会导致整段产生无意义的换行 diff。
   const newline = fileContent.includes("\r\n") ? "\r\n" : "\n";
@@ -178,13 +201,17 @@ export function findTabBlock(
   const matches: TabBlock[] = [];
   for (let index = 0; index < lines.length; index += 1) {
     const opening = lines[index].match(/^( {0,3})([\x60~]{3,})tab(?:\s*)$/);
-    if (!opening) continue;
+    if (!opening) {
+      continue;
+    }
 
     const marker = opening[2][0];
     const markerLength = opening[2].length;
     for (let endIndex = index + 1; endIndex < lines.length; endIndex += 1) {
       const closing = lines[endIndex].match(/^ {0,3}([\x60~]{3,})\s*$/);
-      if (!closing || closing[1][0] !== marker || closing[1].length < markerLength) continue;
+      if (!closing || closing[1][0] !== marker || closing[1].length < markerLength) {
+        continue;
+      }
 
       const source = lines.slice(index + 1, endIndex).join("\n");
       // 必须同时匹配旧内容。若用户从另一个窗格改过源文，则拒绝盲目覆盖。
@@ -206,22 +233,30 @@ export function findTabBlock(
     }
   }
 
-  matches.sort((left, right) =>
-    Math.abs(left.line - expectedLine) - Math.abs(right.line - expectedLine)
+  matches.sort(
+    (left, right) => Math.abs(left.line - expectedLine) - Math.abs(right.line - expectedLine),
   );
   return matches[0] || null;
 }
 
-export function createTabFence(source: string, marker: string, indent: string, newline = "\n"): string {
+export function createTabFence(
+  source: string,
+  marker: string,
+  indent: string,
+  newline = "\n",
+): string {
   let longest = 2;
   // 外层 fence 必须长于内部同类 fence，否则嵌套代码块会提前关闭 tab 容器。
   for (const line of normalizeNewlines(source).split("\n")) {
     const match = line.match(/^ {0,3}([\x60~]+)/);
-    if (match && match[1][0] === marker) longest = Math.max(longest, match[1].length);
+    if (match && match[1][0] === marker) {
+      longest = Math.max(longest, match[1].length);
+    }
   }
   const fence = marker.repeat(Math.max(3, longest + 1));
-  return indent + fence + "tab" + newline +
-    source.replace(/\n/g, newline) + newline + indent + fence;
+  return (
+    indent + fence + "tab" + newline + source.replace(/\n/g, newline) + newline + indent + fence
+  );
 }
 
 export function safeId(value: string): string {

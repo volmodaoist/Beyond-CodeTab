@@ -4,11 +4,14 @@ import { Compartment, EditorSelection, StateEffect } from "@codemirror/state";
 import type { Extension, TransactionSpec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import type {
-  AppWithEmbedRegistry, MarkdownEmbedContext, MarkdownEmbedOptions, NativeMarkdownEmbed,
+  AppWithEmbedRegistry,
+  MarkdownEmbedContext,
+  MarkdownEmbedOptions,
+  NativeMarkdownEmbed,
 } from "./types";
-import { codeBlockEditorExtensions } from "./codeBlockEditor";
-import type { CodeHighlighting } from "./codeHighlighting";
-import { RenderTypeInput } from "./languageInput";
+import { codeBlockEditorExtensions } from "../CodeBlockEditor";
+import type { CodeHighlighting } from "../CodeBlockEditor";
+import { RenderTypeInput } from "./renderTypeInput";
 import { readTabContent, writeTabContent } from "./tabContent";
 import type { TabContent } from "./tabContent";
 import { loadCodeHighlighting } from "./tabPreview";
@@ -59,26 +62,36 @@ export class TabEditor extends Component {
       this.createNativeEditor();
     } catch (error) {
       console.warn("Code Tab: native Markdown editor unavailable, using fallback", error);
-      if (this.native) this.removeChild(this.native);
+      if (this.native) {
+        this.removeChild(this.native);
+      }
       this.native = null;
       this.createFallbackEditor();
     }
 
-    this.typeInput = this.addChild(new RenderTypeInput(
-      this.options.panel, this.content.renderType, (type) => this.updateHighlighting(type)
-    ));
+    this.typeInput = this.addChild(
+      new RenderTypeInput(this.options.panel, this.content.renderType, (type) =>
+        this.updateHighlighting(type),
+      ),
+    );
     this.registerDomEvent(this.typeInput.input, "keydown", (event) => {
       if (event.key === "Enter" && !event.metaKey && !event.ctrlKey) {
         event.preventDefault();
         event.stopPropagation();
-        if (this.typeInput?.value !== null) this.focus();
+        if (this.typeInput?.value !== null) {
+          this.focus();
+        }
       }
     });
     this.registerInputEvents();
     window.requestAnimationFrame(() => {
-      if (this.disposed) return;
+      if (this.disposed) {
+        return;
+      }
       // 用户可能在初始化的这一帧已点入类型框，不能再把焦点抢回正文。
-      if (this.options.panel.ownerDocument.activeElement !== this.typeInput?.input) this.focus();
+      if (this.options.panel.ownerDocument.activeElement !== this.typeInput?.input) {
+        this.focus();
+      }
       this.options.panel.classList.remove("is-restoring");
       this.options.panel.style.removeProperty("--code-tab-restore-height");
     });
@@ -96,18 +109,23 @@ export class TabEditor extends Component {
       this.typeInput?.input.focus();
       throw new Error("渲染类型不能包含空白、反引号或波浪号");
     }
-    let edited = this.native?.editor?.getValue() ?? this.fallback?.value ?? this.content.editorSource;
+    let edited =
+      this.native?.editor?.getValue() ?? this.fallback?.value ?? this.content.editorSource;
     if (this.fallback && this.content.kind === "code" && this.content.body) {
       // textarea 只显示代码正文；恢复原围栏后与原生编辑器共用格式转换逻辑。
       const body = this.content.body;
-      edited = this.content.source.slice(0, body.from) + edited + this.content.source.slice(body.to);
+      edited =
+        this.content.source.slice(0, body.from) + edited + this.content.source.slice(body.to);
     }
     return writeTabContent(this.content, edited, renderType);
   }
 
   focus() {
-    if (this.native?.editor) this.native.editor.focus();
-    else this.fallback?.focus();
+    if (this.native?.editor) {
+      this.native.editor.focus();
+    } else {
+      this.fallback?.focus();
+    }
   }
 
   private createNativeEditor() {
@@ -116,7 +134,9 @@ export class TabEditor extends Component {
       extension: "md",
     };
     const create = registry?.getEmbedCreator(embedOptions);
-    if (!create) throw new Error("Markdown embed editor unavailable");
+    if (!create) {
+      throw new Error("Markdown embed editor unavailable");
+    }
     const context: MarkdownEmbedContext = {
       app: this.options.app,
       linktext: null,
@@ -130,10 +150,14 @@ export class TabEditor extends Component {
     this.native.editable = true;
     this.native.showEditor();
     const editor = this.native.editor;
-    if (!editor) throw new Error("Markdown editor was not initialized");
+    if (!editor) {
+      throw new Error("Markdown editor was not initialized");
+    }
     editor.setValue(this.content.editorSource);
     const view = editor.cm;
-    if (!view) return;
+    if (!view) {
+      return;
+    }
 
     // 只标记外层编辑器。表格单元格和嵌入内容可能还有自己的 CodeMirror，不能一起套代码样式。
     // 根节点的 class 由 CodeMirror 在每次更新时重建，必须通过扩展声明，不能直接 add。
@@ -152,8 +176,10 @@ export class TabEditor extends Component {
     }
     const transaction: TransactionSpec = {
       effects: StateEffect.appendConfig.of(extensions),
-      selection: this.content.kind === "code" && this.content.body
-        ? EditorSelection.single(this.content.body.from) : undefined,
+      selection:
+        this.content.kind === "code" && this.content.body
+          ? EditorSelection.single(this.content.body.from)
+          : undefined,
     };
     view.dispatch(transaction);
   }
@@ -164,13 +190,17 @@ export class TabEditor extends Component {
     this.fallback.className = "code-tab__fallback-editor";
     this.fallback.setAttribute("data-testid", "code-tab-fallback");
     const body = this.content.body;
-    this.fallback.value = this.content.kind === "code" && body
-      ? this.content.source.slice(body.from, body.to) : this.content.editorSource;
+    this.fallback.value =
+      this.content.kind === "code" && body
+        ? this.content.source.slice(body.from, body.to)
+        : this.content.editorSource;
     this.fallback.spellcheck = false;
     this.fallback.rows = 1;
     this.host.appendChild(this.fallback);
     const resize = () => {
-      if (!this.fallback) return;
+      if (!this.fallback) {
+        return;
+      }
       // 先归零再测量，让新增和删除行都能同步改变高度，中间状态不会被绘制。
       this.fallback.style.height = "0";
       this.fallback.style.height = this.fallback.scrollHeight + "px";
@@ -181,15 +211,23 @@ export class TabEditor extends Component {
 
   private setHighlightingClass() {
     this.host.classList.toggle("has-prism-highlighting", !!this.highlighting);
-    if (this.highlighting?.language) this.host.classList.add("language-" + this.highlighting.language);
+    if (this.highlighting?.language) {
+      this.host.classList.add("language-" + this.highlighting.language);
+    }
   }
 
   private async updateHighlighting(renderType: string) {
     // Markdown 继续使用宿主的实时预览；类型变化在保存时转换格式。
-    if (this.content.kind !== "code") return;
+    if (this.content.kind !== "code") {
+      return;
+    }
     const highlighting = await loadCodeHighlighting(renderType);
-    if (this.disposed || this.typeInput?.value !== renderType) return;
-    if (this.highlighting?.language) this.host.classList.remove("language-" + this.highlighting.language);
+    if (this.disposed || this.typeInput?.value !== renderType) {
+      return;
+    }
+    if (this.highlighting?.language) {
+      this.host.classList.remove("language-" + this.highlighting.language);
+    }
     this.highlighting = highlighting;
     this.setHighlightingClass();
     const transaction: TransactionSpec = {
@@ -202,12 +240,19 @@ export class TabEditor extends Component {
     const panel = this.options.panel;
     const editorWindow = panel.ownerDocument.defaultView;
     const keydown = (event: KeyboardEvent) => {
-      if (!event.composedPath().includes(panel)) return;
-      if (event.key !== "Escape" && !(event.key === "Enter" && (event.metaKey || event.ctrlKey))) return;
+      if (!event.composedPath().includes(panel)) {
+        return;
+      }
+      if (event.key !== "Escape" && !(event.key === "Enter" && (event.metaKey || event.ctrlKey))) {
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
-      if (event.key === "Escape") this.options.onCancel();
-      else this.options.onSave();
+      if (event.key === "Escape") {
+        this.options.onCancel();
+      } else {
+        this.options.onSave();
+      }
     };
     // 与宿主全局 keymap 一样在窗口捕获阶段处理，正文、表格单元格和类型框都能保存/取消。
     editorWindow?.addEventListener("keydown", keydown, true);
@@ -218,7 +263,9 @@ export class TabEditor extends Component {
       this.pointerY = event.clientY;
       const path = event.composedPath();
       // 布局变化不算主动移出；移向 + 时由新增动作按顺序保存当前编辑。
-      if (moved && !path.includes(panel) && !path.includes(this.options.addButton)) this.options.onSave();
+      if (moved && !path.includes(panel) && !path.includes(this.options.addButton)) {
+        this.options.onSave();
+      }
     });
   }
 }

@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { access, copyFile, mkdir, mkdtemp, open, readFile, readdir, writeFile } from "node:fs/promises";
+import {
+  access,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  open,
+  readFile,
+  readdir,
+  writeFile,
+} from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -8,15 +17,19 @@ import { chromium } from "playwright";
 
 /** 启动真实 Obsidian；配置、插件与测试笔记全部放入新建的临时目录。 */
 export async function launchTestVault(initialMarkdown) {
-  const executable = process.env.CODE_TAB_OBSIDIAN_BIN || "/Applications/Obsidian.app/Contents/MacOS/Obsidian";
-  const installedData = process.env.CODE_TAB_OBSIDIAN_DATA || join(homedir(), "Library/Application Support/obsidian");
+  const executable =
+    process.env.CODE_TAB_OBSIDIAN_BIN || "/Applications/Obsidian.app/Contents/MacOS/Obsidian";
+  const installedData =
+    process.env.CODE_TAB_OBSIDIAN_DATA || join(homedir(), "Library/Application Support/obsidian");
   await access(executable);
   const directory = await mkdtemp(join(tmpdir(), "code-tab-e2e-"));
   const profile = join(directory, "profile");
   const vault = join(directory, "vault");
   const plugin = join(vault, ".obsidian/plugins/obsidian-code-tab");
   await mkdir(profile);
-  await mkdir(plugin, { recursive: true });
+  await mkdir(plugin, {
+    recursive: true,
+  });
 
   // 桌面安装器与实际应用版本可能不同，只复制本机已安装的更新包，不复制用户配置。
   const archives = await readdir(installedData).catch(() => []);
@@ -26,12 +39,26 @@ export async function launchTestVault(initialMarkdown) {
   for (const name of ["main.js", "styles.css", "manifest.json"]) {
     await copyFile(new URL("../../dist/" + name, import.meta.url), join(plugin, name));
   }
-  await writeFile(join(profile, "obsidian.json"), JSON.stringify({
-    vaults: { codetabe2e0000001: { path: vault, ts: Date.now(), open: true } },
-  }));
-  await writeFile(join(vault, ".obsidian/app.json"), JSON.stringify({
-    defaultViewMode: "preview", showInlineTitle: true, livePreview: true,
-  }));
+  await writeFile(
+    join(profile, "obsidian.json"),
+    JSON.stringify({
+      vaults: {
+        codetabe2e0000001: {
+          path: vault,
+          ts: Date.now(),
+          open: true,
+        },
+      },
+    }),
+  );
+  await writeFile(
+    join(vault, ".obsidian/app.json"),
+    JSON.stringify({
+      defaultViewMode: "preview",
+      showInlineTitle: true,
+      livePreview: true,
+    }),
+  );
   await writeFile(join(vault, ".obsidian/community-plugins.json"), '["obsidian-code-tab"]');
   await writeFile(join(vault, "Test.md"), initialMarkdown);
 
@@ -40,7 +67,9 @@ export async function launchTestVault(initialMarkdown) {
     stdio: ["ignore", log.fd, log.fd],
   });
   let launchError;
-  child.on("error", (error) => { launchError = error; });
+  child.on("error", (error) => {
+    launchError = error;
+  });
   let browser;
   const close = async () => {
     try {
@@ -55,16 +84,25 @@ export async function launchTestVault(initialMarkdown) {
   try {
     let port;
     for (let attempt = 0; attempt < 120; attempt += 1) {
-      if (launchError) throw launchError;
-      if (child.exitCode !== null) throw new Error("Obsidian exited; see " + directory);
-      const activePort = await readFile(join(profile, "DevToolsActivePort"), "utf8").catch(() => "");
-      if (activePort) { port = Number(activePort.split("\n")[0]); break; }
+      if (launchError) {
+        throw launchError;
+      }
+      if (child.exitCode !== null) {
+        throw new Error("Obsidian exited; see " + directory);
+      }
+      const activePort = await readFile(join(profile, "DevToolsActivePort"), "utf8").catch(
+        () => "",
+      );
+      if (activePort) {
+        port = Number(activePort.split("\n")[0]);
+        break;
+      }
       await delay(250);
     }
     assert.ok(port, "Obsidian debugging endpoint did not start; see " + directory);
     browser = await chromium.connectOverCDP("http://127.0.0.1:" + port);
     const context = browser.contexts()[0];
-    const page = context.pages()[0] || await context.waitForEvent("page");
+    const page = context.pages()[0] || (await context.waitForEvent("page"));
     page.setDefaultTimeout(10000);
     await page.waitForFunction(() => window.app?.vault?.adapter?.basePath);
     // 后续操作的硬边界：必须是本次创建的测试仓库，绝不能连接到用户已打开的仓库。
@@ -84,7 +122,9 @@ export async function launchTestVault(initialMarkdown) {
     // 只观察插件创建的真实 embed，不替换 MarkdownRenderer、CodeMirror 或 Vault。
     // 首次启动偶尔会重载页面；waitForFunction 跨导航重试，且等工作区就绪后才安装观察器。
     await page.waitForFunction(() => {
-      if (!window.app?.workspace?.layoutReady || !app.plugins.plugins["obsidian-code-tab"]) return false;
+      if (!window.app?.workspace?.layoutReady || !app.plugins.plugins["obsidian-code-tab"]) {
+        return false;
+      }
       const registry = app.embedRegistry;
       const original = registry.getEmbedCreator;
       registry.getEmbedCreator = function (...args) {
@@ -93,7 +133,12 @@ export async function launchTestVault(initialMarkdown) {
       };
       return true;
     });
-    return { page, directory, vault, close };
+    return {
+      page,
+      directory,
+      vault,
+      close,
+    };
   } catch (error) {
     await close();
     throw error;

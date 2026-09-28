@@ -145,7 +145,7 @@ const fenceMatch = line.match(/^ {0,3}([\x60~]{3,})(.*)$/);
 
 ## 6. 渲染上下文、DOM 与编辑状态
 
-下面这些对象出现在 [src/components/tabGroup.ts](../src/components/tabGroup.ts) 中，用于把文本数据与界面连接起来。
+下面这些对象出现在 [src/components/MultiTab/tabGroup.ts](../src/components/MultiTab/tabGroup.ts) 中，用于把文本数据与界面连接起来。
 
 | 名称 | 类型或内容 | 职责 |
 | --- | --- | --- |

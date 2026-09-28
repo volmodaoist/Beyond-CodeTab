@@ -4,8 +4,13 @@ import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
 
 const compiled = await build({
-  entryPoints: [fileURLToPath(new URL("../src/components/tabContent.ts", import.meta.url))],
-  bundle: true, format: "esm", platform: "node", write: false,
+  entryPoints: [
+    fileURLToPath(new URL("../src/components/MultiTab/tabContent.ts", import.meta.url)),
+  ],
+  bundle: true,
+  format: "esm",
+  platform: "node",
+  write: false,
 });
 const { readTabContent, writeTabContent } = await import(
   "data:text/javascript;base64," + Buffer.from(compiled.outputFiles[0].text).toString("base64")
@@ -14,7 +19,12 @@ const { readTabContent, writeTabContent } = await import(
 const table = "| 标识 | 说明 |\n| --- | --- |\n| id | 标识符 |";
 
 test("普通 Markdown、表格和画布链接保留全文，不需要代码围栏", () => {
-  for (const source of [table, "![[Drawing.excalidraw.md]]", "段落\n\n```python\nprint(1)\n```", ""]) {
+  for (const source of [
+    table,
+    "![[Drawing.excalidraw.md]]",
+    "段落\n\n```python\nprint(1)\n```",
+    "",
+  ]) {
     const content = readTabContent(source);
     assert.equal(content.kind, "markdown");
     assert.equal(content.editorSource, source);
@@ -47,5 +57,8 @@ test("其他处理器保持围栏语法，代码与正文空行不被重写", ()
   assert.equal(content.kind, "code");
   assert.equal(content.editorSource, source);
   assert.equal(writeTabContent(content, source, "mermaid"), source);
-  assert.equal(writeTabContent(content, source, "自定义-renderer"), source.replace("mermaid", "自定义-renderer"));
+  assert.equal(
+    writeTabContent(content, source, "自定义-renderer"),
+    source.replace("mermaid", "自定义-renderer"),
+  );
 });

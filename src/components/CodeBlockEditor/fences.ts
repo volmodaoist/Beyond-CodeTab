@@ -15,18 +15,28 @@ export interface CodeBlockBody {
  */
 export function findCodeBlockBody(source: string): CodeBlockBody | null {
   const lines = source.split("\n");
-  if (lines.length < 3) return null;
+  if (lines.length < 3) {
+    return null;
+  }
 
   const opening = lines[0].match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
-  if (!opening) return null;
+  if (!opening) {
+    return null;
+  }
   const marker = opening[1][0];
   const length = opening[1].length;
-  if (marker === "`" && opening[2].includes("`")) return null;
+  if (marker === "`" && opening[2].includes("`")) {
+    return null;
+  }
 
   for (let index = 1; index < lines.length; index += 1) {
     const closing = lines[index].match(/^ {0,3}(`{3,}|~{3,})[ \t]*$/);
-    if (!closing || closing[1][0] !== marker || closing[1].length < length) continue;
-    if (index !== lines.length - 1) return null;
+    if (!closing || closing[1][0] !== marker || closing[1].length < length) {
+      continue;
+    }
+    if (index !== lines.length - 1) {
+      return null;
+    }
 
     const body: CodeBlockBody = {
       from: lines[0].length + 1,
@@ -41,7 +51,9 @@ export function findCodeBlockBody(source: string): CodeBlockBody | null {
 
 function foldedFences(doc: Text): DecorationSet {
   const body = findCodeBlockBody(doc.toString());
-  if (!body) return Decoration.none;
+  if (!body) {
+    return Decoration.none;
+  }
 
   // 用行内替换装饰连同换行一起折叠，保留原生输入所需的行盒和正文边界。
   // 块替换在正文为空或末尾刚按 Enter 时会吞掉空行，导致下一次输入位置错误。
@@ -82,7 +94,9 @@ export function codeBlockEditorExtensions(): Extension[] {
     key: "Mod-a",
     run(view) {
       const body = findCodeBlockBody(view.state.doc.toString());
-      if (!body) return false;
+      if (!body) {
+        return false;
+      }
       // 全选限定为可见正文，随后粘贴/替换不会把插入位置落到受保护的开头围栏里。
       const transaction: TransactionSpec = {
         selection: EditorSelection.single(body.from, body.to),
@@ -97,7 +111,9 @@ export function codeBlockEditorExtensions(): Extension[] {
     EditorView.atomicRanges.of((view) => view.state.field(fenceField)),
     EditorState.changeFilter.of((transaction) => {
       const body = findCodeBlockBody(transaction.startState.doc.toString());
-      if (!body) return true;
+      if (!body) {
+        return true;
+      }
       // changeFilter 的数字区间只保护区间内部，0 和 doc.length 上的插入仍会通过。
       // 宿主可能直接派发修改，因此除了约束选区，还必须拦住围栏内及文档两端的插入。
       let insertsOutsideBody = false;
@@ -106,31 +122,37 @@ export function codeBlockEditorExtensions(): Extension[] {
           insertsOutsideBody = true;
         }
       });
-      if (insertsOutsideBody) return false;
+      if (insertsOutsideBody) {
+        return false;
+      }
       return [0, body.from, body.to, transaction.startState.doc.length];
     }),
-    Prec.highest(EditorState.transactionFilter.of((transaction) => {
-      const body = findCodeBlockBody(transaction.newDoc.toString());
-      if (!body) return transaction;
-      const selection = transaction.newSelection;
-      if (selection.ranges.every((range) => range.from >= body.from && range.to <= body.to)) {
-        return transaction;
-      }
+    Prec.highest(
+      EditorState.transactionFilter.of((transaction) => {
+        const body = findCodeBlockBody(transaction.newDoc.toString());
+        if (!body) {
+          return transaction;
+        }
+        const selection = transaction.newSelection;
+        if (selection.ranges.every((range) => range.from >= body.from && range.to <= body.to)) {
+          return transaction;
+        }
 
-      // atomicRanges 只负责跨过隐藏区域，不能阻止 Cmd+↓、鼠标或宿主命令选中文档末尾。
-      // 所有选区入口都在这里收束到正文；保留选择方向和主选区，兼容拖选、全选和多光标。
-      const clamp = (position: number) => Math.max(body.from, Math.min(position, body.to));
-      const ranges = selection.ranges.map((range) =>
-        EditorSelection.range(clamp(range.anchor), clamp(range.head))
-      );
-      const correction: TransactionSpec = {
-        selection: EditorSelection.create(ranges, selection.mainIndex),
-        sequential: true,
-      };
+        // atomicRanges 只负责跨过隐藏区域，不能阻止 Cmd+↓、鼠标或宿主命令选中文档末尾。
+        // 所有选区入口都在这里收束到正文；保留选择方向和主选区，兼容拖选、全选和多光标。
+        const clamp = (position: number) => Math.max(body.from, Math.min(position, body.to));
+        const ranges = selection.ranges.map((range) =>
+          EditorSelection.range(clamp(range.anchor), clamp(range.head)),
+        );
+        const correction: TransactionSpec = {
+          selection: EditorSelection.create(ranges, selection.mainIndex),
+          sequential: true,
+        };
 
-      // correction 的坐标基于修改后的文档，sequential 避免粘贴后再次映射导致光标漂移。
-      return [transaction, correction];
-    })),
+        // correction 的坐标基于修改后的文档，sequential 避免粘贴后再次映射导致光标漂移。
+        return [transaction, correction];
+      }),
+    ),
   ];
 
   return extensions;

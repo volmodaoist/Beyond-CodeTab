@@ -341,7 +341,7 @@ export function registerHeadingLog(plugin: Plugin): void {
 
 插件级功能挂在 `Plugin` 上；某个代码块自己的事件挂在该块的 `MarkdownRenderChild` 上。否则代码块消失后，资源可能继续留到整个插件卸载时才释放。
 
-Code Tab 在 [src/main.ts](../src/main.ts) 中为每个 `tab` 块创建 `MarkdownRenderChild`，在 [tabGroup.ts](../src/components/tabGroup.ts) 中登记按钮事件，并将动态创建的原生编辑器作为子组件管理。
+Code Tab 在 [src/main.ts](../src/main.ts) 中为每个 `tab` 块创建 `MarkdownRenderChild`，在 [tabGroup.ts](../src/components/MultiTab/tabGroup.ts) 中登记按钮事件，并将动态创建的原生编辑器作为子组件管理。
 
 监听文件修改后再次写同一文件，可能触发自己的监听器。需要通过内容是否变化、操作来源或业务条件避免重复写入。`vault` 的 `create` 事件在启动加载库时也可能出现；只关心启动后的新文件时，可在 `onLayoutReady()` 中再注册。
 
@@ -431,7 +431,7 @@ CLI 命令 ID 必须全局唯一；官方建议默认命令使用插件 ID，子
 
 `requestUrl()` 的官方声明说明它不受浏览器 CORS 限制，但这不会绕过服务端身份验证，也不代表所有 `fetch()` 选项都可照搬。它返回的响应使用 `.text`、`.json` 等属性，具体按 `RequestUrlResponse` 类型访问。
 
-样式同样有官方约定。可以在 `styles.css` 中使用 `--background-primary`、`--text-normal`、`--interactive-accent` 等主题变量。当前 [src/styles.css](../src/styles.css) 使用 `.code-tab` 作为样式范围，让组件跟随 Obsidian 主题。DOM 的 `createEl()`、`empty()` 等便利方法也有官方类型声明；它们不会自动提供响应式数据绑定。
+样式同样有官方约定。可以在 `styles.css` 中使用 `--background-primary`、`--text-normal`、`--interactive-accent` 等主题变量。当前 [MultiTab/styles.css](../src/components/MultiTab/styles.css) 使用 `.code-tab` 作为样式范围，让组件跟随 Obsidian 主题。DOM 的 `createEl()`、`empty()` 等便利方法也有官方类型声明；它们不会自动提供响应式数据绑定。
 
 ## 11. Bases 等较新扩展能力
 
@@ -473,11 +473,11 @@ Bases 自定义视图适合把属性查询结果展示为卡片、时间线或�
 | --- | --- | --- |
 | `src/main.ts` | `Plugin`、`addCommand()`、代码块处理器 | 公开扩展点 |
 | `src/main.ts` | `MarkdownRenderChild`、`context.addChild()` | 公开生命周期 API |
-| `src/components/tabGroup.ts` | `MarkdownRenderer.render()` | 公开 Markdown 渲染 API |
-| `src/components/tabGroup.ts` | `registerDomEvent()`、`addChild()`、`removeChild()` | 公开生命周期 API |
+| `src/components/MultiTab/tabGroup.ts` | `MarkdownRenderer.render()` | 公开 Markdown 渲染 API |
+| `src/components/MultiTab/tabGroup.ts` | `registerDomEvent()`、`addChild()`、`removeChild()` | 公开生命周期 API |
 | `src/markdown.ts` | `vault.process()`、`read()`、`modify()` | 公开文件 API |
-| `src/components/tabGroup.ts` | `app.embedRegistry.getEmbedCreator()` | 内部接口，用于临时创建原生编辑器 |
-| `src/components/types.ts` | `AppWithEmbedRegistry`、`NativeMarkdownEmbed` | 本项目为内部接口定义的类型，不是官方类型 |
+| `src/components/MultiTab/tabGroup.ts` | `app.embedRegistry.getEmbedCreator()` | 内部接口，用于临时创建原生编辑器 |
+| `src/components/MultiTab/types.ts` | `AppWithEmbedRegistry`、`NativeMarkdownEmbed` | 本项目为内部接口定义的类型，不是官方类型 |
 | 原生编辑器相关代码 | `showEditor()`、`editor.cm` | 依赖内部对象结构，不属于通用 `Editor` 的公开创建接口 |
 
 在本文核对的公开 API 中，`Editor` 主要用于操作已有的编辑器，没有与本项目 `embedRegistry` 用法等价的“在任意容器创建完整原生 Markdown embed editor”的公开工厂。
@@ -491,9 +491,9 @@ Obsidian 也没有把所有内置功能都开放为注册接口。例如，不�
 学习本仓库可以按如下次序将扩展点对应到实际代码：
 
 1. [src/main.ts](../src/main.ts)：看 `onload()` 如何注册代码块和命令。
-2. [src/components/tabGroup.ts](../src/components/tabGroup.ts)：看公开渲染 API、DOM 事件和组件生命周期如何配合。
+2. [src/components/MultiTab/tabGroup.ts](../src/components/MultiTab/tabGroup.ts)：看公开渲染 API、DOM 事件和组件生命周期如何配合。
 3. [src/markdown.ts](../src/markdown.ts)：看为什么保存需要同时处理文件定位、原内容校验和文本替换。
-4. [src/components/types.ts](../src/components/types.ts)：区分业务数据类型、官方 API 类型和内部接口适配类型。
+4. [src/components/MultiTab/types.ts](../src/components/MultiTab/types.ts)：区分业务数据类型、官方 API 类型和内部接口适配类型。
 5. [tests/markdown.test.mjs](../tests/markdown.test.mjs)：看文本处理如何脱离 Obsidian UI 进行验证。
 
 安装依赖后，本地权威入口是 `node_modules/obsidian/obsidian.d.ts`。在编辑器中对 `Plugin` 或方法名“跳转到定义”，可以直接看到参数、返回值、`@since` 和 `@deprecated`。在终端里也可以查找：

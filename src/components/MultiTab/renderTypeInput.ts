@@ -1,5 +1,5 @@
 import { Component } from "obsidian";
-import { normalizeCodeLanguage } from "./codeLanguage";
+import { normalizeCodeLanguage } from "../CodeBlockEditor";
 
 /** 只负责类型输入与校验。预览、着色和保存由编辑会话处理，不在输入事件中渲染临时文档。 */
 export class RenderTypeInput extends Component {
@@ -24,7 +24,9 @@ export class RenderTypeInput extends Component {
       this.input.setAttribute("aria-invalid", String(renderType === null));
       window.clearTimeout(this.timer);
       // 连续输入合并为一次着色更新；真正写回 Markdown 只发生在保存时。
-      if (renderType !== null) this.timer = window.setTimeout(() => onChange(renderType), 180);
+      if (renderType !== null) {
+        this.timer = window.setTimeout(() => onChange(renderType), 180);
+      }
     });
     this.register(() => {
       window.clearTimeout(this.timer);

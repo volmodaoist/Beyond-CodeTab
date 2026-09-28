@@ -1,6 +1,6 @@
 import { MarkdownRenderChild, Plugin } from "obsidian";
 import type { Command } from "obsidian";
-import { renderTabGroup } from "./components/tabGroup";
+import { renderTabGroup } from "./components/MultiTab";
 
 // 外层默认使用四个反引号，内部便可直接放常见的三个反引号代码块。
 const TAB_FENCE = String.fromCharCode(96).repeat(4);

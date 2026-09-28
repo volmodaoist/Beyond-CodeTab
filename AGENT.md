@@ -33,4 +33,10 @@ return { marker: marks[0], length: marks.length, suffix: match[2] };
 
 ## 修改与验证
 
-调整风格时保留原有注释、业务行为和用户正在进行的改动。修改源码后运行 `npm test && npm run build`，其中构建命令包含 TypeScript 类型检查；无需为纯格式和命名调整新增测试。
+调整风格时保留原有注释、业务行为和用户正在进行的改动。
+
+- 不压行。`if`、`else`、`for`、`while` 等控制语句始终使用大括号，条件与执行语句分行书写；函数体也不要挤在一行。
+- 运行 `npm run lint:fix` 自动修复代码风格；每次提交前必须运行 `npm run lint`，不能跳过检查。
+- 修改源码后运行 `npm test && npm run build`，其中构建命令包含 TypeScript 类型检查；无需为纯格式和命名调整新增测试。
+- `MultiTab` 管理标签与 Markdown 编辑会话，`CodeBlockEditor` 管理单代码块的围栏和高亮。组件样式放在各自目录的 `styles.css`，根样式只汇总导入。
+- 组件内部直接导入相邻文件，对外通过目录 `index.ts` 导出实际需要的接口；不要为目录整理引入框架、基类或服务层。

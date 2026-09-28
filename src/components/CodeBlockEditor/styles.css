@@ -1,0 +1,58 @@
+.code-tab__panel pre {
+  margin-block: 0 !important;
+  padding: var(--code-tab-code-padding);
+  border: 0;
+  border-radius: var(--code-tab-radius);
+  background: var(--code-background);
+  box-shadow: none;
+}
+
+.code-tab__panel pre code {
+  /* 使用独立行盒，避免 pre 的默认字号/基线影响正文位置。 */
+  display: block;
+  /* 新标签的空代码块也保留一行，点击开始输入时无需突然增高。 */
+  min-height: 1.7em;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.code-tab__native-editor.is-code-content {
+  --code-tab-editor-background: var(--code-background);
+}
+
+/* 单代码块才使用等宽字体与代码内边距。表格单元格也是 CodeMirror，不能用 .cm-content 泛匹配。 */
+.code-tab__native-editor.is-code-content .code-tab__cm-content {
+  padding: var(--code-tab-code-padding) !important;
+  font-family: var(--font-monospace);
+  font-size: var(--code-size);
+  line-height: 1.7;
+}
+
+.code-tab__native-editor.is-code-content .code-tab__cm-content > .cm-line.HyperMD-codeblock {
+  /* 外层已应用代码字号；宿主的 --code-size 通常是相对值（如 0.875em）。
+       若 HyperMD 行再应用一次，14px 会变成 12.25px，点击后文字和行高都会收缩。 */
+  font-size: inherit !important;
+  line-height: inherit !important;
+  /* 与预览使用相同的代码换行规则，避免隐藏围栏的零宽占位符把长代码挤到下一行。 */
+  white-space: pre-wrap !important;
+  word-break: break-all !important;
+}
+
+/* 正文只使用与预览相同的 Prism token 着色，普通字符不沿用另一套语法颜色。 */
+.code-tab__native-editor.has-prism-highlighting .code-tab__cm-content {
+  color: var(--code-normal);
+}
+
+.code-tab__native-editor.has-prism-highlighting
+  .code-tab__cm-content
+  > .cm-line
+  span:not(.code-tab__syntax) {
+  color: inherit !important;
+  font-weight: inherit !important;
+  font-style: inherit !important;
+}
+
+.code-tab__native-editor.is-code-content .code-tab__fallback-editor {
+  padding: var(--code-tab-code-padding);
+}

@@ -1,9 +1,15 @@
 import { Component, Notice, setIcon } from "obsidian";
 import type { MarkdownPostProcessorContext, MarkdownRenderChild } from "obsidian";
-import type CodeTabPlugin from "../main";
+import type CodeTabPlugin from "../../main";
 import type { TabData, TabGroupInfo } from "./types";
-import { normalizeNewlines, parseTabs, safeId, serializeTabs, updateMarkdownSource } from "../markdown";
-import type { CodeHighlighting } from "./codeHighlighting";
+import {
+  normalizeNewlines,
+  parseTabs,
+  safeId,
+  serializeTabs,
+  updateMarkdownSource,
+} from "../../markdown";
+import type { CodeHighlighting } from "../CodeBlockEditor";
 import { renderTabPreview } from "./tabPreview";
 import { TabEditor } from "./tabEditor";
 import type { TabEditorOptions } from "./tabEditor";
@@ -22,8 +28,11 @@ function getGroupInfo(context: MarkdownPostProcessorContext, element: HTMLElemen
 }
 
 export function renderTabGroup(
-  plugin: CodeTabPlugin, component: MarkdownRenderChild, element: HTMLElement,
-  context: MarkdownPostProcessorContext, initialSource: string
+  plugin: CodeTabPlugin,
+  component: MarkdownRenderChild,
+  element: HTMLElement,
+  context: MarkdownPostProcessorContext,
+  initialSource: string,
 ) {
   // source 不含最外层 ```tab fence，只包含各标签的声明和正文。
   let source = normalizeNewlines(initialSource);
@@ -78,10 +87,14 @@ export function renderTabGroup(
 
   const activate = (index: number, focus = false, rememberSelection = true) => {
     // 编辑中不允许直接切换标签，否则鼠标点击会先销毁当前编辑器并丢失未保存内容。
-    if (editingIndex >= 0 && editingIndex !== index) return;
+    if (editingIndex >= 0 && editingIndex !== index) {
+      return;
+    }
 
     activeIndex = index;
-    if (rememberSelection) plugin.activeTabs.set(group.id, index);
+    if (rememberSelection) {
+      plugin.activeTabs.set(group.id, index);
+    }
 
     buttons.forEach((button, buttonIndex) => {
       const active = buttonIndex === index;
@@ -91,7 +104,9 @@ export function renderTabGroup(
       panelElements[buttonIndex].hidden = !active;
     });
 
-    if (focus) buttons[index].focus();
+    if (focus) {
+      buttons[index].focus();
+    }
   };
 
   const renderPanel = async (index: number) => {
@@ -101,12 +116,22 @@ export function renderTabGroup(
     panel.empty();
     // 每次预览都有独立生命周期。切换到编辑或重新渲染时，旧嵌入的监听器与子组件一并释放。
     const previousPreview = previews.get(index);
-    if (previousPreview) component.removeChild(previousPreview);
+    if (previousPreview) {
+      component.removeChild(previousPreview);
+    }
     const preview = component.addChild(new Component());
     previews.set(index, preview);
     try {
-      const highlighting = await renderTabPreview(plugin.app, preview, panel, context.sourcePath, tabs[index].content);
-      if (highlighting) panelHighlighting.set(index, highlighting);
+      const highlighting = await renderTabPreview(
+        plugin.app,
+        preview,
+        panel,
+        context.sourcePath,
+        tabs[index].content,
+      );
+      if (highlighting) {
+        panelHighlighting.set(index, highlighting);
+      }
     } finally {
       // 预览完成后才解锁高度，避免卸载编辑器到异步渲染完成之间先塌陷、再撑开。
       panel.classList.remove("is-editing", "is-restoring");
@@ -117,18 +142,25 @@ export function renderTabGroup(
 
   const startEditing = (index: number, click: MouseEvent) => {
     // 一个标签组同时只编辑一个页面。编辑器负责输入，标签组统一负责写回和状态切换。
-    if (editingIndex >= 0 || addingTab || renderingPanels.has(index)) return;
+    if (editingIndex >= 0 || addingTab || renderingPanels.has(index)) {
+      return;
+    }
     activate(index);
     editingIndex = index;
     element.addClass("is-editing");
     const panel = panelElements[index];
     // 原生编辑器初始化会同步测量布局。先保留高度，防止清空长表格时整页短暂变短、
     // 浏览器把已有 scrollTop 裁到 0；初始化完成即释放，后续输入仍自然增高或收缩。
-    panel.style.setProperty("--code-tab-restore-height", panel.getBoundingClientRect().height + "px");
+    panel.style.setProperty(
+      "--code-tab-restore-height",
+      panel.getBoundingClientRect().height + "px",
+    );
     panel.addClass("is-restoring");
     const originalContent = tabs[index].content;
     const preview = previews.get(index);
-    if (preview) component.removeChild(preview);
+    if (preview) {
+      component.removeChild(preview);
+    }
     previews.delete(index);
     panel.empty();
     panel.addClass("is-editing");
@@ -137,11 +169,16 @@ export function renderTabGroup(
 
     const leaveEditor = async () => {
       // 仅在切回异步预览期间保持当前高度，编辑过程中仍按内容自然增高或收缩。
-      panel.style.setProperty("--code-tab-restore-height", panel.getBoundingClientRect().height + "px");
+      panel.style.setProperty(
+        "--code-tab-restore-height",
+        panel.getBoundingClientRect().height + "px",
+      );
       panel.classList.add("is-restoring");
       component.removeChild(editor);
       try {
-        if (panel.isConnected) await renderPanel(index);
+        if (panel.isConnected) {
+          await renderPanel(index);
+        }
       } finally {
         editingIndex = -1;
         saveCurrentEditor = null;
@@ -151,11 +188,15 @@ export function renderTabGroup(
 
     const cancel = async () => {
       // 保存开始后不允许取消，避免两个异步操作同时释放会话；平时 Esc 不写文件。
-      if (!saving) await leaveEditor();
+      if (!saving) {
+        await leaveEditor();
+      }
     };
 
     const persistEdit = async (): Promise<boolean> => {
-      if (editingIndex !== index || saving) return false;
+      if (editingIndex !== index || saving) {
+        return false;
+      }
       saving = true;
       try {
         const nextContent = editor.getValue().replace(/^\n+|\n+$/g, "");
@@ -169,7 +210,13 @@ export function renderTabGroup(
             return nextTab;
           });
           const nextSource = serializeTabs(nextTabs);
-          await updateMarkdownSource(plugin.app, context.sourcePath, group.lineStart, source, nextSource);
+          await updateMarkdownSource(
+            plugin.app,
+            context.sourcePath,
+            group.lineStart,
+            source,
+            nextSource,
+          );
           tabs = nextTabs;
           source = nextSource;
         }
@@ -185,7 +232,11 @@ export function renderTabGroup(
 
     const save = (): Promise<boolean> => {
       // 鼠标移出、快捷键和新增按钮共享同一次保存，不重复写入文件。
-      if (!pendingSave) pendingSave = persistEdit().finally(() => { pendingSave = null; });
+      if (!pendingSave) {
+        pendingSave = persistEdit().finally(() => {
+          pendingSave = null;
+        });
+      }
       return pendingSave;
     };
     const options: TabEditorOptions = {
@@ -218,14 +269,24 @@ export function renderTabGroup(
     component.registerDomEvent(button, "click", () => activate(index));
     component.registerDomEvent(button, "keydown", (event) => {
       // 使用 WAI-ARIA tabs 常见键位，鼠标之外也能完整切换标签。
-      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+        return;
+      }
       event.preventDefault();
 
       let next = activeIndex;
-      if (event.key === "ArrowLeft") next = (activeIndex - 1 + tabs.length) % tabs.length;
-      if (event.key === "ArrowRight") next = (activeIndex + 1) % tabs.length;
-      if (event.key === "Home") next = 0;
-      if (event.key === "End") next = tabs.length - 1;
+      if (event.key === "ArrowLeft") {
+        next = (activeIndex - 1 + tabs.length) % tabs.length;
+      }
+      if (event.key === "ArrowRight") {
+        next = (activeIndex + 1) % tabs.length;
+      }
+      if (event.key === "Home") {
+        next = 0;
+      }
+      if (event.key === "End") {
+        next = tabs.length - 1;
+      }
       activate(next, true);
     });
     tabList.insertBefore(button, addButton);
@@ -243,14 +304,20 @@ export function renderTabGroup(
 
     renderPanel(index);
     component.registerDomEvent(panel, "click", (event) => {
-      if (editingIndex >= 0) return;
+      if (editingIndex >= 0) {
+        return;
+      }
       // Obsidian 会给代码块附加复制/源码按钮。点击源码按钮时也进入编辑，
       // 但普通链接和表单控件仍保留它们原本的行为。
       const target = event.target as Element | null;
-      if (!target) return;
+      if (!target) {
+        return;
+      }
       // 图片、笔记和 Excalidraw 等嵌入保留自己的点击/双击行为，不把画布替换成链接源码。
       // Excalidraw 渲染完成后会替换宿主的 internal-embed 外壳，需要识别它自己的预览节点。
-      if (target.closest(".internal-embed, .excalidraw-svg, .excalidraw-embedded-img")) return;
+      if (target.closest(".internal-embed, .excalidraw-svg, .excalidraw-embedded-img")) {
+        return;
+      }
       const codeButton = target.closest("pre button");
       if (codeButton) {
         event.preventDefault();
@@ -263,15 +330,21 @@ export function renderTabGroup(
   };
 
   component.registerDomEvent(addButton, "click", async () => {
-    if (addingTab) return;
+    if (addingTab) {
+      return;
+    }
     addingTab = true;
     addButton.disabled = true;
     const previousIndex = activeIndex;
     try {
-      if (saveCurrentEditor && !await saveCurrentEditor()) return;
+      if (saveCurrentEditor && !(await saveCurrentEditor())) {
+        return;
+      }
       // 默认标题避开已有同名标签；空代码块可立即输入，并通过语言框选择着色方式。
       let number = tabs.length + 1;
-      while (tabs.some((tab) => tab.title === "标签" + number)) number += 1;
+      while (tabs.some((tab) => tab.title === "标签" + number)) {
+        number += 1;
+      }
       const tab: TabData = {
         title: "标签" + number,
         content: EMPTY_CODE_BLOCK,
@@ -281,7 +354,13 @@ export function renderTabGroup(
       const nextSource = source + "\n\n" + serializeTabs([tab]);
       // 宿主可能因文件更新重建组件，先记录选择，让重建后的组件也显示新标签。
       plugin.activeTabs.set(group.id, index);
-      await updateMarkdownSource(plugin.app, context.sourcePath, group.lineStart, source, nextSource);
+      await updateMarkdownSource(
+        plugin.app,
+        context.sourcePath,
+        group.lineStart,
+        source,
+        nextSource,
+      );
       tabs.push(tab);
       source = nextSource;
       if (element.isConnected) {
