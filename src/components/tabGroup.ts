@@ -1,4 +1,4 @@
-import { Component, loadPrism, MarkdownRenderer, Notice } from "obsidian";
+import { Component, loadPrism, MarkdownRenderer, Notice, setIcon } from "obsidian";
 import type { MarkdownPostProcessorContext, MarkdownRenderChild } from "obsidian";
 import { Compartment, EditorSelection, StateEffect } from "@codemirror/state";
 import type { Extension, TransactionSpec } from "@codemirror/state";
@@ -42,6 +42,8 @@ export function renderTabGroup(
 
   element.empty();
   element.addClass("code-tab");
+  // 测试标识描述组件用途；同页多个标签组由父容器限定范围，不占用全局 DOM id。
+  element.setAttribute("data-testid", "code-tab-group");
 
   if (tabs.length === 0) {
     const empty = document.createElement("div");
@@ -54,13 +56,16 @@ export function renderTabGroup(
   const groupSuffix = safeId(group.id);
   const tabList = document.createElement("div");
   tabList.className = "code-tab__list";
+  tabList.setAttribute("data-testid", "code-tab-list");
   tabList.setAttribute("role", "tablist");
   element.appendChild(tabList);
 
   const addButton = document.createElement("button");
   addButton.className = "code-tab__add";
   addButton.type = "button";
-  addButton.textContent = "+";
+  addButton.setAttribute("data-testid", "code-tab-add");
+  // SVG 图标使用与标签相同的居中布局，避免文本 + 的字体基线造成视觉下沉。
+  setIcon(addButton, "plus");
   addButton.setAttribute("aria-label", "新增标签");
   addButton.title = "新增标签";
   tabList.appendChild(addButton);
@@ -154,6 +159,7 @@ export function renderTabGroup(
 
     const editorHost = document.createElement("div");
     editorHost.className = "code-tab__native-editor";
+    editorHost.setAttribute("data-testid", "code-tab-editor");
     editorHost.classList.toggle("has-prism-highlighting", !!highlighting);
     // Prism 样式也会按语言区分 token，例如 CSS 字符串的颜色不同于普通字符串。
     if (highlighting?.language) editorHost.classList.add("language-" + highlighting.language);
@@ -304,6 +310,7 @@ export function renderTabGroup(
       editorHost.empty();
       fallbackTextarea = document.createElement("textarea");
       fallbackTextarea.className = "code-tab__fallback-editor";
+      fallbackTextarea.setAttribute("data-testid", "code-tab-fallback");
       fallbackTextarea.value = codeBody
         ? originalContent.slice(codeBody.from, codeBody.to)
         : originalContent;
@@ -405,6 +412,7 @@ export function renderTabGroup(
 
     const button = document.createElement("button");
     button.className = "code-tab__tab";
+    button.setAttribute("data-testid", "code-tab-tab");
     button.type = "button";
     button.id = tabId;
     button.textContent = tab.title;
@@ -428,6 +436,7 @@ export function renderTabGroup(
 
     const panel = document.createElement("div");
     panel.className = "code-tab__panel markdown-rendered";
+    panel.setAttribute("data-testid", "code-tab-panel");
     panel.id = panelId;
     panel.setAttribute("role", "tabpanel");
     panel.setAttribute("aria-labelledby", tabId);

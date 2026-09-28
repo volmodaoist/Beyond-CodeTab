@@ -25,6 +25,7 @@ export class CodeLanguageInput extends Component {
     super();
     this.input = panel.ownerDocument.createElement("input");
     this.input.className = "code-tab__language-input";
+    this.input.setAttribute("data-testid", "code-tab-language");
     this.input.type = "text";
     this.input.value = initialLanguage;
     this.input.placeholder = "text";

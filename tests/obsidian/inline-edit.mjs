@@ -11,8 +11,8 @@ const { page, directory, vault } = host;
 const reports = [];
 const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
-const group = page.locator(".code-tab:visible");
-const previewCode = group.locator(".code-tab__panel:not([hidden]) pre code");
+const group = page.getByTestId("code-tab-group").filter({ visible: true });
+const previewCode = group.getByTestId("code-tab-panel").filter({ visible: true }).locator("pre code");
 const fileContent = () => readFile(join(vault, "Test.md"), "utf8");
 const editorContent = () => page.evaluate(() => window.codeTabTestEmbed.editor.getValue());
 
@@ -266,7 +266,7 @@ try {
   // 私有 API 失效时仍能在原位编辑正文并保留围栏。
   await page.evaluate(() => { app.embedRegistry.getEmbedCreator = () => undefined; });
   await previewCode.click();
-  const fallback = group.locator("textarea");
+  const fallback = group.getByTestId("code-tab-fallback");
   const shortBounds = await fallback.boundingBox();
   await fallback.fill(Array.from({ length: 10 }, (_, index) => `print(${index})`).join("\n"));
   const longBounds = await fallback.boundingBox();

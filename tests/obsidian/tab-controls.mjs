@@ -14,10 +14,10 @@ await page.setViewportSize({ width: 1000, height: 800 });
 const errors = [];
 const reports = [];
 page.on("pageerror", (error) => errors.push(error.message));
-const group = page.locator(".code-tab:visible").first();
-const panel = group.locator(".code-tab__panel:not([hidden])");
-const language = group.getByRole("textbox", { name: "编程语言" });
-const content = group.locator(".code-tab__native-editor .cm-content");
+const group = page.getByTestId("code-tab-group").filter({ visible: true }).first();
+const panel = group.getByTestId("code-tab-panel").filter({ visible: true });
+const language = group.getByTestId("code-tab-language");
+const content = group.getByTestId("code-tab-editor").locator(".cm-content");
 const fileContent = () => readFile(join(vault, "Test.md"), "utf8");
 const editorContent = () => page.evaluate(() => window.codeTabTestEmbed.editor.getValue());
 
@@ -63,10 +63,41 @@ async function waitForLanguage(name) {
   await group.locator(".code-tab__native-editor.language-" + name.replace(/[+#.]/g, "\\$&")).waitFor();
 }
 
+async function assertTabBarAlignment() {
+  const measurements = await group.getByTestId("code-tab-list").evaluate((list) => {
+    const rect = (element) => {
+      const box = element.getBoundingClientRect();
+      return { top: box.top, height: box.height, center: box.top + box.height / 2 };
+    };
+    const add = list.querySelector('[data-testid="code-tab-add"]');
+    const icon = add.querySelector("svg");
+    const tabs = [...list.querySelectorAll('[data-testid="code-tab-tab"]')].map((tab) => {
+      const range = document.createRange();
+      range.selectNodeContents(tab);
+      return { button: rect(tab), text: rect(range) };
+    });
+    return { add: rect(add), icon: icon && rect(icon), tabs };
+  });
+  assert.ok(measurements.icon, "新增按钮应使用不受字体基线影响的加号图标");
+  for (const tab of measurements.tabs) {
+    assert.ok(Math.abs(measurements.add.top - tab.button.top) < 1, "新增按钮与标签顶部一致");
+    assert.ok(Math.abs(measurements.add.height - tab.button.height) < 1, "新增按钮与标签高度一致");
+    assert.ok(Math.abs(measurements.icon.center - tab.text.center) < 1.5,
+      `加号与标签文字应在同一水平线：${measurements.icon.center} / ${tab.text.center}`);
+  }
+}
+
 try {
   for (const mode of ["preview", "source"]) for (const theme of ["light", "dark"]) {
     await reset(mode, theme);
     const label = mode + "-" + theme;
+    // 同时测中英文标签、宽窄窗口；只测按钮外框会漏掉字体不同导致的图标偏移。
+    for (const width of [1000, 600]) {
+      await page.setViewportSize({ width, height: 800 });
+      await assertTabBarAlignment();
+      await group.screenshot({ path: join(directory, label + "-alignment-" + width + ".png") });
+    }
+    await page.setViewportSize({ width: 1000, height: 800 });
     assert.equal(await language.count(), 0, "预览态没有语言输入框");
     const before = await panel.boundingBox();
     await enterEditor();
@@ -140,6 +171,7 @@ try {
     await group.getByRole("tab", { name: "标签5", exact: true }).waitFor();
     assert.equal(await group.getByRole("tab").count(), 4);
     assert.equal((await fileContent()).match(/tab: 标签5/g)?.length, 1);
+    await assertTabBarAlignment();
     await page.screenshot({ path: join(directory, label + "-added.png") });
     reports.push({ mode, theme, result: "passed" });
     console.log("PASS tab controls", label);
@@ -161,7 +193,7 @@ try {
   // 原生 API 不可用时，语言输入也必须和 textarea 正文一起安全保存。
   await page.evaluate(() => { app.embedRegistry.getEmbedCreator = () => undefined; });
   await enterEditor();
-  await group.locator("textarea").fill("SELECT 42;");
+  await group.getByTestId("code-tab-fallback").fill("SELECT 42;");
   await language.fill("sql");
   await language.press("Meta+Enter");
   await waitForPreview();

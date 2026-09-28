@@ -34,10 +34,17 @@
 .code-tab__tab,
 .code-tab__add {
     appearance: none;
+    /* 两种按钮共享同一个行高与居中方式，不继承宿主按钮的固定高度。
+       留白由标签栏的 min-height 提供，避免上下 padding 把文字或图标挤偏。 */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    height: auto;
     flex: 0 0 auto;
     min-width: 4.25rem;
     margin: 0;
-    padding: 0.78rem 0.85rem 0.68rem;
+    padding: 0 0.85rem;
     border: 0 !important;
     border-radius: 0;
     box-shadow: none !important;
@@ -98,7 +105,13 @@
 .code-tab__add {
     min-width: 2.25rem;
     padding-inline: 0.6rem;
-    font-size: var(--font-ui-large);
+}
+
+.code-tab__add .svg-icon {
+    display: block;
+    flex-shrink: 0;
+    width: 1em;
+    height: 1em;
 }
 
 .code-tab__add:disabled {
