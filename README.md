@@ -365,7 +365,7 @@ npm run test:obsidian
 
 默认路径适用于 macOS 的 `/Applications/Obsidian.app`。如果安装位置不同，可通过 `CODE_TAB_OBSIDIAN_BIN` 指定可执行文件，通过 `CODE_TAB_OBSIDIAN_DATA` 指定包含 `obsidian-版本.asar` 更新包的应用数据目录。脚本只复制更新包，以便使用与本机一致的应用版本。当前键盘回归按 macOS 的 Cmd 快捷键编写。
 
-测试窗口默认隐藏，关闭后台节流后继续执行真实布局、输入和截图，避免桌面鼠标操作干扰测试。需要观察运行过程时，使用 `CODE_TAB_SHOW_TEST_WINDOW=1 npm run test:obsidian`。四组测试分别输出各自的截图和报告目录。
+测试窗口默认隐藏，关闭后台节流后继续执行真实布局、输入和截图，避免桌面鼠标操作干扰测试。需要观察运行过程时，使用 `CODE_TAB_SHOW_TEST_WINDOW=1 npm run test:obsidian`。五组测试分别输出各自的截图和报告目录，其中表格切换测试会逐帧检查尺寸，避免只比较稳定后的布局而漏掉瞬间抖动。
 
 覆盖阅读视图和实时预览、亮暗主题、宽窄窗口下的以下流程：
 

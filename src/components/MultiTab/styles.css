@@ -307,14 +307,15 @@
   padding: 16px !important;
 }
 
-/* 宿主在表格前后放置空光标行。焦点位于单元格时不让这些定位行撑高表格；
-   键盘离开单元格、回到正文编辑器时恢复行盒，仍可在表格前后输入文字。 */
+/* 宿主在表格前后放置空光标行。正文没有对应空行时，它们只是定位占位，不应撑高表格。
+   这里依据文档边界，而非 cm-focused：初始化会先聚焦外层编辑器、再聚焦单元格，
+   按焦点切换高度会闪出两条 24px 空行。键盘离开表格后插入的真实空行仍保留行盒。 */
 .code-tab__native-editor.is-markdown-content
-  .code-tab__cm-root:not(.cm-focused)
+  .code-tab__cm-root[data-leading-blank-line="false"]
   .code-tab__cm-content
   > .cm-line:first-child:has(> br:only-child):has(+ .cm-table-widget),
 .code-tab__native-editor.is-markdown-content
-  .code-tab__cm-root:not(.cm-focused)
+  .code-tab__cm-root[data-trailing-blank-line="false"]
   .code-tab__cm-content
   > .cm-table-widget
   + .cm-line:last-child:has(> br:only-child) {

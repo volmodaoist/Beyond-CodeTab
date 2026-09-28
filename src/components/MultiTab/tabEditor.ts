@@ -161,8 +161,17 @@ export class TabEditor extends Component {
 
     // 只标记外层编辑器。表格单元格和嵌入内容可能还有自己的 CodeMirror，不能一起套代码样式。
     // 根节点的 class 由 CodeMirror 在每次更新时重建，必须通过扩展声明，不能直接 add。
-    const editorAttributes: Record<string, string> = {
-      class: "code-tab__cm-root",
+    const editorAttributes = (editorView: EditorView): Record<string, string> => {
+      const doc = editorView.state.doc;
+      // 表格前后会出现不对应正文的空光标行。用真实文档区分占位行和可输入的空行，
+      // 避免初始化从外层编辑器转入单元格时，因焦点变化让占位行短暂撑高面板。
+      // 方向键离开表格时，宿主会插入真实空行；文档更新会同步恢复该行的高度。
+      const attributes: Record<string, string> = {
+        class: "code-tab__cm-root",
+        "data-leading-blank-line": String(doc.line(1).length === 0),
+        "data-trailing-blank-line": String(doc.line(doc.lines).length === 0),
+      };
+      return attributes;
     };
     const extensions: Extension[] = [EditorView.editorAttributes.of(editorAttributes)];
     view.scrollDOM.classList.add("code-tab__cm-scroller");
