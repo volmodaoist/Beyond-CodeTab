@@ -28,9 +28,10 @@ test("无语言的空代码块也能设置语言，混合内容不开放单一�
 });
 
 test("允许常见别名、未知语言及留空，不允许语言输入改变 Markdown 结构", () => {
-  for (const language of ["c++", "c#", "objective-c", "custom.language", "unknown_lang"]) {
+  for (const language of ["c++", "c#", "objective-c", "custom.language", "unknown_lang", "自定义-renderer", "$custom"]) {
     assert.equal(normalizeCodeLanguage(language), language);
   }
+  assert.equal(replaceCodeLanguage("```text\ncode\n```", "$custom"), "```$custom\ncode\n```");
   assert.equal(normalizeCodeLanguage(" Python "), "python");
   assert.equal(normalizeCodeLanguage("  "), "text");
   for (const language of ["python\ntab: inserted", "js```", "python title", "~js"]) {

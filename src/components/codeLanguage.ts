@@ -7,11 +7,11 @@ export function getCodeLanguage(source: string): string | null {
   return opening ? opening[1] : null;
 }
 
-/** 空输入使用 text；允许 Prism 别名与自定义语言名，但不允许注入围栏或附加行。 */
+/** 类型名不设语言白名单；只排除会改变 Markdown 围栏结构的空白和围栏字符。 */
 export function normalizeCodeLanguage(value: string): string | null {
   const language = value.trim().toLowerCase();
   if (!language) return "text";
-  return /^[a-z0-9_+#.-]+$/.test(language) ? language : null;
+  return /^[^\s`~]+$/.test(language) ? language : null;
 }
 
 /** 只替换开头的语言名，保留围栏长度、缩进、附加信息及正文中的全部空白。 */
@@ -19,5 +19,5 @@ export function replaceCodeLanguage(source: string, language: string): string {
   if (getCodeLanguage(source) === null || normalizeCodeLanguage(language) !== language) {
     throw new Error("无效的代码块或编程语言");
   }
-  return source.replace(/^( {0,3}(?:`{3,}|~{3,})[\t ]*)([^\s]*)/, "$1" + language);
+  return source.replace(/^( {0,3}(?:`{3,}|~{3,})[\t ]*)([^\s]*)/, (_match, prefix: string) => prefix + language);
 }
