@@ -2,7 +2,7 @@
 
 这篇文档回答两个问题：**插件可以接入 Obsidian 的哪些位置，以及接入以后可以调用哪些宿主能力。** 可以先读 [从 Code Tab 入门 Obsidian 插件开发](./obsidian-plugin-development-guide.md)，再用本文按功能查找 API。
 
-本文于 2026-09-24 根据本仓库安装的官方 `obsidian@1.13.1` 类型声明整理，结合当前 Code Tab 源码说明。它是一份按任务组织的导航，完整签名和版本要求以对应版本的 `obsidian.d.ts` 为准。示例中的 `DemoPlugin` 是独立教学示例，不表示仓库已经实现了相应功能。
+本文的 API 基线为本仓库安装的官方 `obsidian@1.13.1` 类型声明，Code Tab 接入位置已按 2026-09-28 的源码更新。它是一份按任务组织的导航，完整签名和版本要求以对应版本的 `obsidian.d.ts` 为准。示例中的 `DemoPlugin` 是独立教学示例，不表示仓库已经实现了相应功能。
 
 ## 1. 扩展点和 API 分别是什么
 
@@ -71,25 +71,28 @@
 
 ```ts
 import { Notice, Plugin } from "obsidian";
+import type { Command } from "obsidian";
 
 export default class DemoPlugin extends Plugin {
   onload() {
-    this.addCommand({
+    const showNote: Command = {
       id: "show-current-note",
       name: "显示当前笔记",
       callback: () => {
         const file = this.app.workspace.getActiveFile();
         new Notice(file ? file.path : "当前没有打开笔记");
       },
-    });
+    };
+    this.addCommand(showNote);
 
-    this.addCommand({
+    const wrapSelection: Command = {
       id: "wrap-selection",
       name: "给选区添加粗体标记",
       editorCallback: (editor) => {
         editor.replaceSelection("**" + editor.getSelection() + "**");
       },
-    });
+    };
+    this.addCommand(wrapSelection);
   }
 }
 ```
@@ -98,7 +101,7 @@ export default class DemoPlugin extends Plugin {
 
 需要条件控制时使用 `checkCallback` 或 `editorCheckCallback`。当 `checking === true` 时只判断命令能否执行，不能在这个阶段写文件、弹窗或改变选区。
 
-当前 Code Tab 的 [src/main.ts](../src/main.ts) 使用 `editorCallback` 和 `editor.replaceSelection(template)` 插入标签模板。
+当前 Code Tab 的 [src/main.ts](../src/main.ts) 使用 `editorCallback` 和 `editor.replaceSelection(TAB_TEMPLATE)` 插入顶部常量定义的标签模板。
 
 ### 4.2 同一个动作可以有不同入口
 
@@ -114,6 +117,8 @@ export default class DemoPlugin extends Plugin {
 | 短消息提示 | `new Notice(message)` | 操作结果、错误信息 |
 
 文件右键菜单回调已经给出了目标 `file`，应使用这个对象；工作区当前激活文件可能是另外一个文件。
+
+Code Tab 的 [tabActions.ts](../src/components/MultiTab/tabActions.ts) 在标签按钮的 `contextmenu` 事件中创建 `Menu`，用 `setUseNativeMenu(false)` 选择随主题显示的 DOM 菜单，再通过 `Modal` 确认删除。双击改名使用临时 HTML 输入框。这些界面通过回调交给 `tabGroup.ts` 写回，不直接修改 Vault。
 
 ## 5. Markdown 渲染和编辑器扩展
 
@@ -137,16 +142,11 @@ import { MarkdownRenderChild, MarkdownRenderer, Plugin } from "obsidian";
 
 export default class DemoPreviewPlugin extends Plugin {
   onload() {
-    this.registerMarkdownCodeBlockProcessor(
-      "demo-preview",
-      async (source, element, context) => {
-        const child = new MarkdownRenderChild(element);
-        context.addChild(child);
-        await MarkdownRenderer.render(
-          this.app, source, element, context.sourcePath, child
-        );
-      }
-    );
+    this.registerMarkdownCodeBlockProcessor("demo-preview", async (source, element, context) => {
+      const child = new MarkdownRenderChild(element);
+      context.addChild(child);
+      await MarkdownRenderer.render(this.app, source, element, context.sourcePath, child);
+    });
   }
 }
 ```
@@ -186,6 +186,10 @@ export default class DemoPreviewPlugin extends Plugin {
 
 `registerEditorExtension()` 接受 CodeMirror 6 的 `Extension` 或扩展数组。`ViewPlugin`、`StateField`、`Decoration` 等来自 CodeMirror 包；Obsidian 还公开了 `editorInfoField`、`editorLivePreviewField` 等用于连接宿主上下文的字段。扩展应区分源码模式与实时预览，也要跟随编辑器生命周期处理状态。
 
+Code Tab 只改造自己临时创建的编辑器，因此没有调用插件级 `registerEditorExtension()`。当前 [tabEditor.ts](../src/components/MultiTab/tabEditor.ts) 通过 `StateEffect.appendConfig` 安装局部扩展：`CodeBlockEditor` 提供围栏折叠、编辑边界保护和 Prism mark 装饰，类型改变时通过 `Compartment.reconfigure()` 更新着色。外层 DOM 标记和表格边界属性通过 `EditorView.editorAttributes` 声明，跟随文档更新。
+
+Prism 由 [tabPreview.ts](../src/components/MultiTab/tabPreview.ts) 调用公开的 `loadPrism()` 加载；普通 Markdown、表格和嵌入继续交给 `MarkdownRenderer.render()`。右下角输入的类型也可以是插件处理器名，不限于 Prism 语言。
+
 `registerEditorSuggest()` 则是专门的输入候选扩展。通常继承 `EditorSuggest<T>`，实现 `onTrigger()`、`getSuggestions()`、`renderSuggestion()`、`selectSuggestion()`。候选输入和独立弹窗分别使用 `EditorSuggest` 与 `SuggestModal`。
 
 ## 6. 自定义视图、工作区与文件类型
@@ -196,6 +200,7 @@ export default class DemoPreviewPlugin extends Plugin {
 
 ```ts
 import { ItemView, Notice, Plugin } from "obsidian";
+import type { Command, ViewState } from "obsidian";
 
 const VIEW_TYPE = "code-tab-demo-panel";
 
@@ -209,7 +214,10 @@ class DemoView extends ItemView {
   }
 
   async onOpen() {
-    this.contentEl.createEl("p", { text: "这是一个自定义视图。" });
+    const paragraph: DomElementInfo = {
+      text: "这是一个自定义视图。",
+    };
+    this.contentEl.createEl("p", paragraph);
   }
 
   async onClose() {
@@ -220,22 +228,28 @@ class DemoView extends ItemView {
 export default class DemoViewPlugin extends Plugin {
   onload() {
     this.registerView(VIEW_TYPE, (leaf) => new DemoView(leaf));
-    this.addCommand({
+    const openPanel: Command = {
       id: "open-demo-panel",
       name: "打开示例面板",
       callback: async () => {
         try {
           const workspace = this.app.workspace;
-          const leaf = workspace.getLeavesOfType(VIEW_TYPE)[0]
-            ?? workspace.getRightLeaf(false);
-          if (!leaf) return;
-          await leaf.setViewState({ type: VIEW_TYPE, active: true });
+          const leaf = workspace.getLeavesOfType(VIEW_TYPE)[0] ?? workspace.getRightLeaf(false);
+          if (!leaf) {
+            return;
+          }
+          const state: ViewState = {
+            type: VIEW_TYPE,
+            active: true,
+          };
+          await leaf.setViewState(state);
           await workspace.revealLeaf(leaf);
         } catch (error) {
           new Notice(error instanceof Error ? error.message : "打开面板失败");
         }
       },
-    });
+    };
+    this.addCommand(openPanel);
   }
 }
 ```
@@ -273,7 +287,9 @@ export default class DemoViewPlugin extends Plugin {
 import type { App, TFile } from "obsidian";
 
 export async function markReviewed(app: App, file: TFile): Promise<void> {
-  if (file.extension !== "md") return;
+  if (file.extension !== "md") {
+    return;
+  }
   await app.fileManager.processFrontMatter(file, (frontmatter) => {
     frontmatter.reviewed = true;
   });
@@ -322,7 +338,7 @@ export function registerHeadingLog(plugin: Plugin): void {
   plugin.registerEvent(
     plugin.app.metadataCache.on("changed", (file, _data, cache) => {
       console.log(file.path, cache.headings?.length ?? 0);
-    })
+    }),
   );
 }
 ```
@@ -341,7 +357,7 @@ export function registerHeadingLog(plugin: Plugin): void {
 
 插件级功能挂在 `Plugin` 上；某个代码块自己的事件挂在该块的 `MarkdownRenderChild` 上。否则代码块消失后，资源可能继续留到整个插件卸载时才释放。
 
-Code Tab 在 [src/main.ts](../src/main.ts) 中为每个 `tab` 块创建 `MarkdownRenderChild`，在 [tabGroup.ts](../src/components/MultiTab/tabGroup.ts) 中登记按钮事件，并将动态创建的原生编辑器作为子组件管理。
+Code Tab 在 [src/main.ts](../src/main.ts) 中为每个 `tab` 块创建 `MarkdownRenderChild`，在 [tabGroup.ts](../src/components/MultiTab/tabGroup.ts) 中为每页建立生命周期组件。编辑时再挂载 [TabEditor](../src/components/MultiTab/tabEditor.ts)，由它管理原生 embed、类型输入框和输入事件；保存、取消或整块卸载时一起释放。窗口捕获阶段的键盘监听和类型输入定时器通过 `register(cleanup)` 清理。
 
 监听文件修改后再次写同一文件，可能触发自己的监听器。需要通过内容是否变化、操作来源或业务条件避免重复写入。`vault` 的 `create` 事件在启动加载库时也可能出现；只关心启动后的新文件时，可在 `onLayoutReady()` 中再注册。
 
@@ -353,20 +369,32 @@ Code Tab 在 [src/main.ts](../src/main.ts) 中为每个 `tab` 块创建 `Markdow
 
 ```ts
 import { Plugin, PluginSettingTab } from "obsidian";
-import type { SettingDefinitionItem } from "obsidian";
+import type { SettingControl, SettingDefinitionItem } from "obsidian";
+
+interface DemoSettings {
+  showHint: boolean;
+}
 
 class DemoSettingsTab extends PluginSettingTab {
   getSettingDefinitions(): SettingDefinitionItem[] {
-    return [{
+    const control: SettingControl = {
+      type: "toggle",
+      key: "showHint",
+      defaultValue: true,
+    };
+    const setting: SettingDefinitionItem = {
       name: "显示提示",
       desc: "控制示例功能是否显示提示。",
-      control: { type: "toggle", key: "showHint", defaultValue: true },
-    }];
+      control,
+    };
+    return [setting];
   }
 }
 
 export default class DemoSettingsPlugin extends Plugin {
-  settings = { showHint: true };
+  settings: DemoSettings = {
+    showHint: true,
+  };
 
   async onload() {
     const saved = await this.loadData();
@@ -400,11 +428,8 @@ export default class DemoIntegrationPlugin extends Plugin {
     });
 
     if (requireApiVersion("1.12.2")) {
-      this.registerCliHandler(
-        "code-tab-demo:count",
-        "返回当前笔记库的 Markdown 文件数",
-        null,
-        () => String(this.app.vault.getMarkdownFiles().length)
+      this.registerCliHandler("code-tab-demo:count", "返回当前笔记库的 Markdown 文件数", null, () =>
+        String(this.app.vault.getMarkdownFiles().length),
       );
     }
   }
@@ -431,7 +456,7 @@ CLI 命令 ID 必须全局唯一；官方建议默认命令使用插件 ID，子
 
 `requestUrl()` 的官方声明说明它不受浏览器 CORS 限制，但这不会绕过服务端身份验证，也不代表所有 `fetch()` 选项都可照搬。它返回的响应使用 `.text`、`.json` 等属性，具体按 `RequestUrlResponse` 类型访问。
 
-样式同样有官方约定。可以在 `styles.css` 中使用 `--background-primary`、`--text-normal`、`--interactive-accent` 等主题变量。当前 [MultiTab/styles.css](../src/components/MultiTab/styles.css) 使用 `.code-tab` 作为样式范围，让组件跟随 Obsidian 主题。DOM 的 `createEl()`、`empty()` 等便利方法也有官方类型声明；它们不会自动提供响应式数据绑定。
+样式同样有官方约定。可以在 `styles.css` 中使用 `--background-primary`、`--text-normal`、`--interactive-accent` 等主题变量。本项目的样式分别位于 [MultiTab/styles.css](../src/components/MultiTab/styles.css) 和 [CodeBlockEditor/styles.css](../src/components/CodeBlockEditor/styles.css)，由根 CSS 的 `@import` 汇总并打包为一个 `dist/styles.css`。DOM 的 `createEl()`、`empty()` 等便利方法也有官方类型声明；它们不会自动提供响应式数据绑定。
 
 ## 11. Bases 等较新扩展能力
 
@@ -473,10 +498,12 @@ Bases 自定义视图适合把属性查询结果展示为卡片、时间线或�
 | --- | --- | --- |
 | `src/main.ts` | `Plugin`、`addCommand()`、代码块处理器 | 公开扩展点 |
 | `src/main.ts` | `MarkdownRenderChild`、`context.addChild()` | 公开生命周期 API |
-| `src/components/MultiTab/tabGroup.ts` | `MarkdownRenderer.render()` | 公开 Markdown 渲染 API |
+| `src/components/MultiTab/tabPreview.ts` | `MarkdownRenderer.render()`、`loadPrism()` | 公开 Markdown 渲染和语法加载 API |
 | `src/components/MultiTab/tabGroup.ts` | `registerDomEvent()`、`addChild()`、`removeChild()` | 公开生命周期 API |
+| `src/components/MultiTab/tabActions.ts` | `Menu`、`Modal`、`Notice` | 公开界面 API |
 | `src/markdown.ts` | `vault.process()`、`read()`、`modify()` | 公开文件 API |
-| `src/components/MultiTab/tabGroup.ts` | `app.embedRegistry.getEmbedCreator()` | 内部接口，用于临时创建原生编辑器 |
+| `src/components/MultiTab/tabEditor.ts` | `app.embedRegistry.getEmbedCreator()`、`editor.cm` | 内部接口，用于创建原生编辑器并取得其 CodeMirror 实例 |
+| `src/components/CodeBlockEditor/` 和 `tabEditor.ts` | `StateField`、`Decoration`、`EditorView.editorAttributes` 等 | CodeMirror 自己的扩展 API；接入 Obsidian 实例仍需上面的内部接口 |
 | `src/components/MultiTab/types.ts` | `AppWithEmbedRegistry`、`NativeMarkdownEmbed` | 本项目为内部接口定义的类型，不是官方类型 |
 | 原生编辑器相关代码 | `showEditor()`、`editor.cm` | 依赖内部对象结构，不属于通用 `Editor` 的公开创建接口 |
 
@@ -491,10 +518,11 @@ Obsidian 也没有把所有内置功能都开放为注册接口。例如，不�
 学习本仓库可以按如下次序将扩展点对应到实际代码：
 
 1. [src/main.ts](../src/main.ts)：看 `onload()` 如何注册代码块和命令。
-2. [src/components/MultiTab/tabGroup.ts](../src/components/MultiTab/tabGroup.ts)：看公开渲染 API、DOM 事件和组件生命周期如何配合。
-3. [src/markdown.ts](../src/markdown.ts)：看为什么保存需要同时处理文件定位、原内容校验和文本替换。
-4. [src/components/MultiTab/types.ts](../src/components/MultiTab/types.ts)：区分业务数据类型、官方 API 类型和内部接口适配类型。
-5. [tests/markdown.test.mjs](../tests/markdown.test.mjs)：看文本处理如何脱离 Obsidian UI 进行验证。
+2. [MultiTab/tabGroup.ts](../src/components/MultiTab/tabGroup.ts)、[tabPreview.ts](../src/components/MultiTab/tabPreview.ts)、[tabActions.ts](../src/components/MultiTab/tabActions.ts)：看状态协调、公开渲染和界面 API 如何配合。
+3. [MultiTab/tabEditor.ts](../src/components/MultiTab/tabEditor.ts) 与 [CodeBlockEditor](../src/components/CodeBlockEditor/index.ts)：看临时编辑器、局部扩展和资源释放。
+4. [src/markdown.ts](../src/markdown.ts)：看为什么保存需要同时处理文件定位、原内容校验和文本替换。
+5. [MultiTab/types.ts](../src/components/MultiTab/types.ts) 与 [tabContent.ts](../src/components/MultiTab/tabContent.ts)：区分业务数据、内容分类、官方类型和内部接口适配类型。
+6. [tests/README.md](../tests/README.md)：选择无需宿主的逻辑检查，或真实 Obsidian 的布局、输入和文件回写回归；表格瞬间位移需要逐帧采样。
 
 安装依赖后，本地权威入口是 `node_modules/obsidian/obsidian.d.ts`。在编辑器中对 `Plugin` 或方法名“跳转到定义”，可以直接看到参数、返回值、`@since` 和 `@deprecated`。在终端里也可以查找：
 

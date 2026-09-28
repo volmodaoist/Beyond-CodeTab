@@ -1,4 +1,6 @@
-# Obsidian 插件开发入门入门
+# Obsidian 插件开发入门
+
+本文按当前 Code Tab 源码说明开发流程。派生版本由 **volmodaoist** 开发和维护，上游来源与 MIT 许可证说明见 [README](../README.md#分享与致谢)。
 
 ## 1. 插件开发的基本原理
 
@@ -6,7 +8,7 @@
 
 Obsidian 桌面端基于 Electron，界面使用 HTML、CSS 和 JavaScript。插件可以像前端代码一样创建 DOM、监听鼠标事件、修改样式，同时还能调用 Obsidian 的能力，例如读取笔记、添加命令和渲染 Markdown。
 
-使用的 Code Tab 为例，可以分成三层：
+以 Code Tab 为例，可以分成三层：
 
 | 层次 | 职责 | 本插件中的例子 |
 | --- | --- | --- |
@@ -35,7 +37,8 @@ import { Plugin } from "obsidian";
 | 操作光标、选区和文本 | `Editor` | 是，插入模板和读写临时编辑器内容 |
 | 操作打开的视图和窗格 | `app.workspace` | 当前主要流程不依赖它 |
 | 添加设置页面、保存插件配置 | `PluginSettingTab`、`loadData()`、`saveData()` | 当前未实现 |
-| 修改输入行为、语法装饰和补全 | `registerEditorExtension()` 与 CodeMirror 6 | 当前没有注册此类扩展 |
+| 修改输入行为、语法装饰和补全 | `registerEditorExtension()` 与 CodeMirror 6 | 已使用 CodeMirror 扩展；通过事务安装到临时编辑器，没有全局注册 |
+| 组件菜单和确认弹窗 | `Menu`、`Modal` | 是，右键删除标签并确认 |
 
 先掌握命令、代码块渲染和文件操作，就能实现很多实用插件；深入改造编辑器时再学习 CodeMirror 6。
 
@@ -67,20 +70,24 @@ import { Plugin } from "obsidian";
 
 [esbuild.config.mjs](../esbuild.config.mjs) 展示了这个转换过程：
 
-```js
-entryPoints: ["src/main.ts"],
-outfile: "dist/main.js",
-bundle: true,
-external: ["obsidian"],
-format: "cjs",
+```ts
+import type { BuildOptions } from "esbuild";
+
+const options: BuildOptions = {
+  entryPoints: ["src/main.ts", "src/styles.css"],
+  outdir: "dist",
+  bundle: true,
+  external: ["obsidian", "@codemirror/state", "@codemirror/view"],
+  format: "cjs",
+};
 ```
 
-- `entryPoints` 指定 TypeScript 入口。
-- `bundle` 将项目模块打包。
-- `external: ["obsidian"]` 保留对宿主 API 的引用。
+- `entryPoints` 指定 TypeScript 和 CSS 两个入口。
+- `bundle` 打包代码，并把根样式的 `@import` 合并为一个样式文件。
+- `external` 保留宿主 API 和 CodeMirror 引用，与 Obsidian 共享编辑器依赖。
 - `format: "cjs"` 生成 CommonJS 模块，供插件加载器使用。
 
-构建脚本还会把清单和样式复制到 `dist/`，形成可安装的三个文件。
+这段摘录展示核心选项。实际脚本还会复制 `manifest.json`，与生成的 `main.js`、`styles.css` 一起形成三个安装文件。
 
 ## 3. 从入口理解注册机制
 
@@ -89,14 +96,11 @@ format: "cjs",
 ```ts
 export default class CodeTabPlugin extends Plugin {
   async onload() {
-    this.registerMarkdownCodeBlockProcessor(
-      "tab",
-      (source, element, context) => {
-        const component = new MarkdownRenderChild(element);
-        context.addChild(component);
-        renderTabGroup(this, component, element, context, source);
-      }
-    );
+    this.registerMarkdownCodeBlockProcessor("tab", (source, element, context) => {
+      const component = new MarkdownRenderChild(element);
+      context.addChild(component);
+      renderTabGroup(this, component, element, context, source);
+    });
   }
 }
 ```
@@ -122,10 +126,10 @@ export default class CodeTabPlugin extends Plugin {
 同一个 `onload()` 还调用了 `addCommand()`。用户执行“Code Tab: 创建标签组件”时，`editorCallback` 获得当前编辑器，并执行：
 
 ```ts
-editor.replaceSelection(template);
+editor.replaceSelection(TAB_TEMPLATE);
 ```
 
-有选区时替换选区，没有选区时在光标处插入。模板默认包含两个标签，外层使用四个反引号，方便内部放普通的三反引号代码块。
+有选区时替换选区，没有选区时在光标处插入。`TAB_TEMPLATE` 和 `TAB_FENCE` 定义在 `main.ts` 顶部；模板默认包含两个标签，外层使用四个反引号，方便内部放普通的三反引号代码块。
 
 命令本身只插入文本；文本随后由 Markdown 渲染流程识别，才变成标签界面。这两条入口通过笔记内容衔接。
 
@@ -146,10 +150,15 @@ tab: JavaScript
 `renderTabGroup()` 接收到内部文本，再调用 [src/markdown.ts](../src/markdown.ts) 中的 `parseTabs()`，得到：
 
 ```ts
-[
-  { title: "Python", content: "这里介绍 Python。" },
-  { title: "JavaScript", content: "这里介绍 JavaScript。" }
-]
+const pythonTab: TabData = {
+  title: "Python",
+  content: "这里介绍 Python。",
+};
+const javascriptTab: TabData = {
+  title: "JavaScript",
+  content: "这里介绍 JavaScript。",
+};
+const tabs: TabData[] = [pythonTab, javascriptTab];
 ```
 
 对应的数据类型定义在 [src/components/MultiTab/types.ts](../src/components/MultiTab/types.ts)：
@@ -161,7 +170,7 @@ export interface TabData {
 }
 ```
 
-解析器逐行处理，并记录当前是否处于内部代码围栏中。只有在围栏外，形如 `tab: 标题` 的声明行才会开启新标签。
+解析器按标签分组扫描。遇到内部代码围栏时，先越过整个代码块，再继续寻找下一条标签声明。因此，只有在围栏外，形如 `tab: 标题` 的声明行才会开启新标签。每收集完一组，就构造一个 `TabData` 并加入数组；具体的 `i`、`bg` 和围栏判断见 [数据结构说明](./code-tab-terminology-and-data-structures.md#4-解析过程中的临时数据)。
 
 例如下面的 `tab: 这是一行代码` 会保留在第一个标签的正文里：
 
@@ -181,13 +190,13 @@ tab: 说明
 
 ## 5. 从数据到 DOM 和交互
 
-界面逻辑集中在 [src/components/MultiTab/tabGroup.ts](../src/components/MultiTab/tabGroup.ts) 的 `renderTabGroup()` 中。它依次完成：
+界面的协调入口是 [MultiTab/tabGroup.ts](../src/components/MultiTab/tabGroup.ts) 的 `renderTabGroup()`。它依次完成：
 
 1. 解析标签数据，获取来源文件和代码块行号。
 2. 创建标签栏与内容面板容器。
 3. 为每个标签创建一个按钮和一个内容面板。
 4. 渲染各面板中的 Markdown。
-5. 注册切换、键盘导航和进入编辑状态的事件。
+5. 注册切换、键盘导航、标签操作和进入编辑状态的事件。
 6. 恢复当前选中的标签。
 
 创建界面的代码就是普通 DOM 操作：
@@ -199,6 +208,19 @@ button.textContent = tab.title;
 ```
 
 项目没有使用 React 或 Vue。Obsidian 的 `Component` 主要负责生命周期管理，不会自动追踪数据变化并重新渲染界面。什么时候创建 DOM、什么时候重新渲染，仍由插件代码决定。
+
+### 两个组件目录怎样分工
+
+| 位置 | 职责 |
+| --- | --- |
+| [MultiTab/tabGroup.ts](../src/components/MultiTab/tabGroup.ts) | 标签数组、选中状态、增删改和写回协调 |
+| [MultiTab/tabActions.ts](../src/components/MultiTab/tabActions.ts) | 标题输入、右键菜单、删除确认；通过回调交给标签组写文件 |
+| [MultiTab/tabContent.ts](../src/components/MultiTab/tabContent.ts) | 区分 Markdown 与单代码块，保存时转换格式 |
+| [MultiTab/tabPreview.ts](../src/components/MultiTab/tabPreview.ts) | Markdown 预览与 Prism 语法加载 |
+| [MultiTab/tabEditor.ts](../src/components/MultiTab/tabEditor.ts)、[renderTypeInput.ts](../src/components/MultiTab/renderTypeInput.ts) | 临时编辑会话、输入与类型选择，不直接操作 Vault |
+| [CodeBlockEditor](../src/components/CodeBlockEditor/index.ts) | 单代码块的正文范围、围栏保护和 Prism 着色装饰 |
+
+每个目录的 `styles.css` 和组件放在一起，由根 [src/styles.css](../src/styles.css) 汇总。这里按职责组织文件，`CodeBlockEditor` 导出的是编辑能力函数，不是另一个常驻编辑器。每个标签通过一个 `TabView` 关联 DOM 和资源，删除时一起释放。
 
 ### 切换标签做了什么
 
@@ -215,16 +237,10 @@ button.textContent = tab.title;
 
 ### Markdown 正文由谁渲染
 
-`renderPanel()` 使用公开 API：
+`renderPanel()` 委托 `tabPreview.ts` 的 `renderTabPreview()` 使用公开 API：
 
 ```ts
-await MarkdownRenderer.render(
-  plugin.app,
-  previewSource,
-  panel,
-  context.sourcePath,
-  component
-);
+await MarkdownRenderer.render(app, previewSource, panel, sourcePath, component);
 ```
 
 这五个参数分别是宿主应用、Markdown 文本、目标容器、来源文件路径和生命周期组件。`sourcePath` 用于解析相对链接，`component` 用于管理渲染产生的子组件。
@@ -232,6 +248,8 @@ await MarkdownRenderer.render(
 插件不必自己实现列表、链接和代码块的 Markdown 渲染。浏览时为各标签创建的是预览内容；完整的原生编辑器只在进入编辑状态时创建。
 
 渲染前，`normalizePreviewFenceLanguages()` 会把 `c++`、`c#` 等语言标记转换成预览高亮器能识别的别名。转换只作用于预览副本，保存时使用的原始标签内容保持原有语言标记。
+
+正文还会先经过 `readTabContent()`：普通 Markdown 直接渲染，单独的 `md` / `markdown` 围栏先解包再渲染，其他代码围栏交给宿主的高亮或代码块处理器。表格使用 Markdown 表格语法，Excalidraw 使用 `![[Drawing.excalidraw.md]]` 并依赖当前仓库安装的 Excalidraw 插件。
 
 ## 6. 编辑和保存：从界面回到 Markdown
 
@@ -253,7 +271,7 @@ flowchart TD
 
 ### 进入和退出编辑
 
-当前实现中，单击正文区域会进入 `startEditing()`。普通链接、输入控件等有自己的点击行为，事件处理器会跳过它们。
+当前实现中，单击正文区域会进入 `startEditing()`，随后创建 `TabEditor`。普通链接、输入控件、图片和 Excalidraw 嵌入等有自己的点击行为，事件处理器会跳过它们。
 
 一个标签组同一时间只维护一个编辑会话。编辑期间不能切到其他标签，以减少切换与保存之间的竞争。
 
@@ -261,17 +279,23 @@ flowchart TD
 | --- | --- | --- |
 | 点击标签标题 | 切换显示面板 | 否 |
 | 单击正文 | 创建临时编辑器 | 否 |
-| 鼠标离开内容面板 | 保存并退出编辑 | 内容变化时写入 |
+| 点击 `+` | 先保存当前编辑，再新增并选中空代码标签 | 是 |
+| 双击标签标题 | 原地改名；Enter / 失焦保存，Esc 取消 | 标题变化时写入 |
+| 右键标签 → 删除标签 | 显示确认弹窗，默认聚焦取消 | 确认后写入 |
+| 编辑态右下角类型框 | 选择代码语言、Markdown 或插件处理器名 | 随正文保存时写入 |
+| 主动移动鼠标离开内容面板 | 保存并退出编辑 | 内容变化时写入 |
 | `Ctrl/Cmd + Enter` | 保存并退出编辑 | 内容变化时写入 |
 | `Esc` | 放弃本次修改并退出编辑 | 否 |
 
-当前版本没有新增、删除、重命名或拖拽标签的按钮。这些结构调整通过编辑源 Markdown 完成。旧版本的操作方式不能直接套用到当前实现。
+编辑正文期间暂时不能重命名、删除或切换标签；`+` 会等待当前编辑保存成功。空标题不能提交，删除最后一页会移除整个外层 `tab` 块。标签排序目前通过调整源 Markdown 完成。
+
+渲染类型允许自由输入，但不接受会破坏围栏的空白、反引号和波浪号。单代码块可即时更新高亮，Markdown 与代码的格式转换在保存时执行，避免输入类型名时重建编辑器、丢失正文撤销历史。
 
 ### 保存调用链
 
 ```text
-save()
-→ 读取编辑器中的 Markdown
+save() / persistEdit()
+→ TabEditor.getValue() 读取输入，并通过 writeTabContent() 应用格式转换
 → 创建 nextTabs，保留其他标签的数据
 → serializeTabs(nextTabs)
 → updateMarkdownSource(...)
@@ -279,7 +303,7 @@ save()
 → leaveEditor() 卸载编辑器，恢复预览
 ```
 
-保存层看到的是字符串。原生编辑器通过 `editor.getValue()` 提供字符串，降级输入框通过 `textarea.value` 提供字符串，两者复用同一套保存逻辑。
+保存层看到的是完整的标签正文字符串。`TabEditor` 从原生编辑器或降级输入框读取内容，恢复必要的围栏，再交给标签组保存；它自身不定位文件、不写 Vault。
 
 代码先写文件，再提交内存里的新标签数据。如果写入失败，会显示 `Notice` 并保留编辑会话，避免界面提前显示为已保存。
 
@@ -292,7 +316,7 @@ save()
 1. 根据 `context.sourcePath` 定位 Markdown 文件。
 2. 在当前文件内容中查找正文与编辑前 `source` 一致的 `tab` 块；比较时统一换行格式。
 3. 如果有多个匹配块，选择最接近原始行号的一个。
-4. 生成新的外层围栏，替换匹配块，并保留其他文件内容。
+4. 生成新的外层围栏，替换匹配块，并保留其他文件内容；删除最后一个标签时传入 `nextSource = null`，只移除匹配块。
 5. 如果没有匹配块，停止保存并提示原标签块已经发生变化。
 
 这是基于旧内容匹配的乐观并发检查。多个完全相同的代码块之间仍依赖行号判断，并没有为每个块分配持久化的唯一 ID。
@@ -312,6 +336,18 @@ await app.vault.process(file, update);
 如果用户在正文中加入代码块，外层 `tab` 围栏必须比内部同类围栏更长，否则内部的结束标记可能提前关闭外层容器。
 
 `createTabFence()` 扫描正文，选择足够长的围栏，并沿用原块的围栏类型、外层缩进和文件换行风格。这样，编辑标签里的代码也属于保存逻辑需要考虑的情况。
+
+### 为什么进入表格编辑时要区分占位行和真实空行
+
+表格单元格有自己的 CodeMirror，外层 Markdown 编辑器也有一个。样式只作用于显式标记的外层节点，如 `.code-tab__cm-root` 和 `.code-tab__cm-content`，避免同时改掉单元格的布局。单代码块的围栏与高亮样式还会限定在 `.is-code-content` 下。
+
+表格进入编辑时，宿主会先聚焦外层编辑器，再聚焦单元格。曾经用 `.cm-focused` 决定是否折叠表格前后的空光标行，结果在焦点交接的一帧里，面板增高 48px、表格下移 24px。最后尺寸虽然恢复，眼睛仍能看见抖动。
+
+当前 `TabEditor` 通过 `EditorView.editorAttributes` 读取文档首尾是否真的为空行，并暴露 `data-leading-blank-line`、`data-trailing-blank-line`。CSS 只折叠没有真实正文对应的占位行；方向键离开表格后，宿主插入的真实空行仍有高度，可以继续输入。这个修复不依赖焦点交接耗时，也不需要延迟定时器。
+
+`is-restoring` 的 `min-height` 解决的是另一段布局变化：预览与编辑器替换时 DOM 短暂为空，可能让整页缩短并裁掉滚动位置。它不能阻止占位行撑高，因此不能替代上面的判断。编辑开始后会释放保留高度，正文仍按输入自然增高或收缩。
+
+对应修复提交为 `02d7124`。回归脚本 [table-transition.mjs](../tests/obsidian/table-transition.mjs) 从点击前开始，通过 `requestAnimationFrame` 和 `ResizeObserver` 采样，检查单击、快速双击、普通双击的整个切换过程，并验证表格前后的方向键输入。
 
 ## 7. 区分笔记数据和界面状态
 
@@ -341,16 +377,19 @@ context.addChild(component);
 
 把当前代码块交给 Markdown 渲染器管理。`MarkdownRenderChild` 继承 `Component`，并用 `containerEl` 对应渲染区域；该区域被移除时，渲染器可以卸载组件。
 
-项目使用了两种资源管理方式：
+当前资源按下面的层次管理：
 
-| 方式 | 代码例子 | 清理责任 |
+| 资源 | 登记位置 | 清理责任 |
 | --- | --- | --- |
-| 交给组件登记 | `component.registerDomEvent(...)`、`component.addChild(editorView)` | 组件卸载时处理登记的事件和子组件 |
-| 编辑会话手工管理 | `addEventListener("mouseleave", save)`、编辑器键盘监听 | `leaveEditor()`、`destroyEditor()` 在退出编辑时解绑或卸载 |
+| 标签按钮、标题输入和预览 | 标签组下面每个 `TabView.component` | 标签删除或代码块卸载时清理 |
+| Markdown 预览中的嵌入 | 每次渲染独立的预览 `Component` | 进入编辑或再次预览时卸载旧实例 |
+| 临时原生编辑器、降级输入框、类型输入框 | `TabEditor` 及其子组件 | `leaveEditor()` 调用 `view.component.removeChild(editor)` 后随会话清理 |
+| 文档鼠标监听、窗口捕获阶段键盘监听 | `TabEditor.registerDomEvent()` 和 `register(cleanup)` | 会话卸载时移除监听 |
+| 类型输入的防抖定时器 | `RenderTypeInput` | 新输入时取消旧任务，组件卸载时清除定时器 |
 
-临时编辑器结束使用时，代码调用 `component.removeChild(editorView)`，及时卸载它。插件自身的 `onunload()` 则清空 `activeTabs`。
+自动保存监听的是文档上的 `mousemove`，并比较鼠标坐标是否真的改变。布局变化把面板从鼠标下面移开，不会被当成用户主动离开。插件自身的 `onunload()` 则清空 `activeTabs`。
 
-以后加入定时器时，可以使用 `registerInterval()` 让生命周期管理它；当前版本没有旧实现中的索引保活定时器。
+周期性任务可以用 `registerInterval()`，一次性资源可以用 `register(cleanup)`。当前没有旧实现中的索引保活定时器。
 
 读这部分时可以始终问两个问题：这个资源由谁创建？正常退出和整个组件卸载时，分别由谁负责清理？
 
@@ -359,10 +398,13 @@ context.addChild(component);
 本项目的浏览态使用公开的 `MarkdownRenderer.render()`。编辑态则需要额外理解，因为它使用了 Obsidian 的内部 Markdown embed：
 
 ```ts
-const embedCreator = embedRegistry.getEmbedCreator({ extension: "md" });
+const embedOptions: MarkdownEmbedOptions = {
+  extension: "md",
+};
+const embedCreator = embedRegistry.getEmbedCreator(embedOptions);
 ```
 
-随后创建实例、登记到父组件、启用编辑，并调用 `showEditor()`。这样可以复用 Obsidian 的输入、光标、选区和语法高亮能力。
+这里的 `MarkdownEmbedOptions` 是项目自定义类型。`TabEditor.createNativeEditor()` 随后创建实例、登记到父组件、启用编辑，并调用 `showEditor()`。Markdown 继续使用宿主的实时预览；单代码块通过 [CodeBlockEditor](../src/components/CodeBlockEditor/index.ts) 追加围栏保护和 Prism 着色扩展，共用浏览态的语法分类。
 
 `embedRegistry` 及相关 embed 行为不属于本插件可依赖的公开稳定契约。[types.ts](../src/components/MultiTab/types.ts) 中的 `AppWithEmbedRegistry`、`NativeMarkdownEmbed` 是项目为实际使用的部分补充的类型声明。**补充类型不会让内部接口变成公开 API。**
 
@@ -378,11 +420,13 @@ const embedCreator = embedRegistry.getEmbedCreator({ extension: "md" });
 | 2 | [main.ts](../src/main.ts) 的 `onload()` | 代码块处理器和命令分别在什么时候执行？ |
 | 3 | [types.ts](../src/components/MultiTab/types.ts) 的 `TabData`、[markdown.ts](../src/markdown.ts) 的 `parseTabs()` | 原始文本怎样变成结构化数据？ |
 | 4 | [tabGroup.ts](../src/components/MultiTab/tabGroup.ts) 的 DOM 创建、`activate()`、`renderPanel()` | 数据怎样变成可切换界面？ |
-| 5 | 同文件的 `startEditing()`、`save()`、`leaveEditor()` | 编辑会话如何开始、保存、取消和结束？ |
-| 6 | [markdown.ts](../src/markdown.ts) 的 `serializeTabs()`、`updateMarkdownSource()`、`findTabBlock()`、`createTabFence()` | 怎样定位原块，避免覆盖已经改变的内容？ |
-| 7 | [styles.css](../src/styles.css)、[markdown.test.mjs](../tests/markdown.test.mjs) | 样式怎样适应主题，哪些文本行为已有自动检查？ |
+| 5 | [tabActions.ts](../src/components/MultiTab/tabActions.ts)、标签组的 `changeTab()` | 怎样改名、确认删除并处理失败？ |
+| 6 | [tabContent.ts](../src/components/MultiTab/tabContent.ts)、[tabEditor.ts](../src/components/MultiTab/tabEditor.ts)、[CodeBlockEditor](../src/components/CodeBlockEditor/index.ts) | 怎样区分 Markdown 与代码，开始编辑并保持输入和高亮？ |
+| 7 | 标签组的 `save()`、`leaveEditor()`，以及 [markdown.ts](../src/markdown.ts) 的序列化和回写函数 | 怎样保存和取消，避免覆盖已经改变的内容？ |
+| 8 | 两个组件目录的 `styles.css` 和根 [styles.css](../src/styles.css) | 怎样限定样式范围、打包样式并保持布局？ |
+| 9 | [测试说明](../tests/README.md) 与对应脚本 | 哪些行为可以在 Node 中检查，哪些需要真实宿主？ |
 
-第一次读 `tabGroup.ts` 时，可以先把创建原生编辑器的部分当作一个“提供文本输入”的模块。先走通外围的数据流，再细读其内部 API。
+第一次读 `tabGroup.ts` 时，可以先把 `TabEditor` 当作一个“提供文本输入”的模块。先走通外围的数据流，再细读 `tabEditor.ts` 中的内部 API。
 
 ## 11. 本地构建、安装与调试
 
@@ -390,6 +434,7 @@ const embedCreator = embedRegistry.getEmbedCreator({ extension: "md" });
 
 ```bash
 npm ci
+npm run lint
 npm run build
 ```
 
@@ -405,37 +450,48 @@ npm run dev
 
 当前监听脚本会监测源码、样式和清单变化，并更新 `dist/`。它不做类型检查，也不会自动把产物复制到笔记库。构建、复制产物和重新加载插件是三个步骤；当前脚本不接受旧工具的 `--vault-path` 或 `--with-stylesheet` 参数。
 
+每个 Vault 都有自己的插件目录和启用状态。替换前可以把旧文件备份到该 Vault 的 `.obsidian/plugin-backups/obsidian-code-tab/<时间>/`，然后只复制三个构建产物；已有的 `data.json` 等用户配置不需要覆盖。`npm run dev` 不会启动浏览器预览服务。
+
+代码风格见 [AGENT.md](../AGENT.md)：固定结构对象先声明具名、带类型的变量；分支和函数体不压行。`npm run lint:fix` 可自动整理格式，提交前运行 `npm run lint`；`npm ci` 也会安装执行该检查的 pre-commit hook。
+
 ### 第一个调试点
 
 在 macOS 的 Obsidian 中按 `Cmd + Option + I` 打开开发者工具，在代码块处理函数内临时添加：
 
 ```ts
-console.log("Code Tab render", {
-  source,
-  sourcePath: context.sourcePath,
-  section: context.getSectionInfo(element),
-});
+console.log("Code Tab render", source, context.sourcePath, context.getSectionInfo(element));
 ```
 
 这能直接展示“笔记中的文本如何进入插件”。`getSectionInfo()` 可能返回 `null`，后续使用位置信息时需要处理这种情况，当前 `getGroupInfo()` 也有对应分支。
 
 再在笔记中放入两个标签，观察切换、进入编辑、保存后日志的变化。Elements 面板则可以查看 `is-active` 类和 `hidden` 属性，确认状态变化如何影响界面。
 
-### 检查分成两层
+### 不同检查分别验证什么
 
 ```bash
-npm test
-npm run build
+npm run lint && npm test && npm run build
 ```
 
-现有自动测试主要覆盖 Markdown 解析、嵌套围栏、序列化、语言别名、LF/CRLF、多个块定位和冲突拒绝。测试中的 Vault 是模拟对象；这些测试不能证明原生编辑器或主题样式在真实 Obsidian 中运行正常。
+这组命令不需要 Obsidian，检查格式、类型、打包，以及 Markdown 解析、回写、围栏保护、着色和内容类型转换。单元测试中的 Vault 是模拟对象，不能据此判断真实界面的布局。
 
-修改界面或编辑器后，再在 Obsidian 中检查：
+本机安装了 Obsidian 后，再运行：
+
+```bash
+npm run test:obsidian
+```
+
+它会先构建，再启动五组真实宿主回归，覆盖代码编辑、标签控件、Markdown 与嵌入、表格逐帧切换、标签改名和删除。每组使用独立临时 Vault，默认隐藏测试窗口，结束时关闭测试进程，保留截图、日志和 `report.json`。运行命令及可选 Excalidraw 配置见 [tests/README.md](../tests/README.md)。
+
+自动化定位使用 `data-testid`，例如先选中可见的 `code-tab-group`，再查找其内部的 `code-tab-tab`、`code-tab-panel`、`code-tab-language`。同页可以有多个标签组，所以不要将这些值当作全局唯一 DOM ID。
+
+修改界面或编辑器后，还应在自己的主题和插件组合下检查：
 
 - 标签可以通过鼠标和键盘切换。
 - 内容、链接和内部代码块正常显示。
 - 单击正文能进入编辑，鼠标移出或快捷键能保存。
 - `Esc` 放弃修改，多代码块笔记保存到正确的位置。
+- 新增、重命名、删除确认及取消符合预期。
+- 表格点击、双击不发生瞬间位移，方向键可以移到表格前后输入。
 - 亮色和暗色主题下内容可见、焦点清楚。
 
 ## 12. 三轮上手练习
