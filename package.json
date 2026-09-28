@@ -2,6 +2,7 @@
   "name": "obsidian-code-tab",
   "version": "2.2.1",
   "description": "Render polished Markdown tab groups with inline content editing.",
+  "author": "volmodaoist",
   "main": "dist/main.js",
   "license": "MIT",
   "scripts": {

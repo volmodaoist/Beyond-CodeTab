@@ -2,7 +2,7 @@
 
 在 Obsidian 笔记中使用 Markdown 创建可切换的标签页，并直接在阅读界面里编辑标签内容。
 
-本版本基于 [lazyloong/obsidian-code-tab](https://github.com/lazyloong/obsidian-code-tab) 的 `2.0-alpha` 版本改造，重点解决两个体验问题：
+本派生版本由 **volmodaoist** 开发和维护，基于 [lazyloong/obsidian-code-tab](https://github.com/lazyloong/obsidian-code-tab) 的 `2.0-alpha` 版本改造，重点解决两个体验问题：
 
 - 浏览时不为每个标签常驻一个完整 Markdown 编辑器，减少多余留白和复杂控件。
 - 编辑时按需使用 Obsidian 原生 Markdown 编辑器，代码正文与预览共用高亮规则。

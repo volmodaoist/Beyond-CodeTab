@@ -2,7 +2,7 @@
   "id": "obsidian-code-tab",
   "name": "Code Tab",
   "description": "Render polished Markdown tab groups with inline content editing.",
-  "author": "lazyloong",
+  "author": "volmodaoist",
 
   "minAppVersion": "0.11.0",
   "version": "2.2.1"
