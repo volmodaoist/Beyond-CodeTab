@@ -13,6 +13,18 @@ import type { CodeHighlighting } from "../CodeBlockEditor";
 import { renderTabPreview } from "./tabPreview";
 import { TabEditor } from "./tabEditor";
 import type { TabEditorOptions } from "./tabEditor";
+import { attachTabActions } from "./tabActions";
+import type { TabActionsOptions } from "./tabActions";
+
+/** 一个标签对应一组 DOM 和资源。删除时一起释放，不用同步维护多个索引 Map。 */
+interface TabView {
+  button: HTMLButtonElement;
+  panel: HTMLDivElement;
+  component: Component;
+  preview: Component | null;
+  highlighting: CodeHighlighting | null;
+  rendering: boolean;
+}
 
 const EMPTY_CODE_BLOCK = "```text\n\n```";
 
@@ -73,15 +85,11 @@ export function renderTabGroup(
   panels.className = "code-tab__panels";
   element.appendChild(panels);
 
-  const buttons: HTMLButtonElement[] = [];
-  const panelElements: HTMLDivElement[] = [];
-  const renderingPanels = new Set<number>();
-  const panelHighlighting = new Map<number, CodeHighlighting>();
-  const previews = new Map<number, Component>();
+  const views: TabView[] = [];
   // 只在当前笔记打开期间记住选中的标签，不向 Markdown 写入额外状态。
   let activeIndex = Math.min(plugin.activeTabs.get(group.id) || 0, tabs.length - 1);
   let editingIndex = -1;
-  let addingTab = false;
+  let changingTabs = false;
   // 新增标签可先等待当前编辑保存；与鼠标移出共享同一次保存，避免并发覆盖。
   let saveCurrentEditor: (() => Promise<boolean>) | null = null;
 
@@ -96,31 +104,38 @@ export function renderTabGroup(
       plugin.activeTabs.set(group.id, index);
     }
 
-    buttons.forEach((button, buttonIndex) => {
+    views.forEach((view, buttonIndex) => {
+      const button = view.button;
       const active = buttonIndex === index;
+      // 删除后序号可能前移，ARIA 关联和键盘导航始终跟随当前顺序。
+      button.id = "code-tab-tab-" + groupSuffix + "-" + buttonIndex;
+      view.panel.id = "code-tab-panel-" + groupSuffix + "-" + buttonIndex;
+      button.setAttribute("aria-controls", view.panel.id);
+      view.panel.setAttribute("aria-labelledby", button.id);
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-selected", String(active));
       button.setAttribute("tabindex", active ? "0" : "-1");
-      panelElements[buttonIndex].hidden = !active;
+      view.panel.hidden = !active;
     });
 
     if (focus) {
-      buttons[index].focus();
+      views[index].button.focus();
     }
   };
 
   const renderPanel = async (index: number) => {
-    const panel = panelElements[index];
-    renderingPanels.add(index);
-    panelHighlighting.delete(index);
+    const view = views[index];
+    const panel = view.panel;
+    view.rendering = true;
+    view.highlighting = null;
     panel.empty();
     // 每次预览都有独立生命周期。切换到编辑或重新渲染时，旧嵌入的监听器与子组件一并释放。
-    const previousPreview = previews.get(index);
+    const previousPreview = view.preview;
     if (previousPreview) {
-      component.removeChild(previousPreview);
+      view.component.removeChild(previousPreview);
     }
-    const preview = component.addChild(new Component());
-    previews.set(index, preview);
+    const preview = view.component.addChild(new Component());
+    view.preview = preview;
     try {
       const highlighting = await renderTabPreview(
         plugin.app,
@@ -130,25 +145,26 @@ export function renderTabGroup(
         tabs[index].content,
       );
       if (highlighting) {
-        panelHighlighting.set(index, highlighting);
+        view.highlighting = highlighting;
       }
     } finally {
       // 预览完成后才解锁高度，避免卸载编辑器到异步渲染完成之间先塌陷、再撑开。
       panel.classList.remove("is-editing", "is-restoring");
       panel.style.removeProperty("--code-tab-restore-height");
-      renderingPanels.delete(index);
+      view.rendering = false;
     }
   };
 
   const startEditing = (index: number, click: MouseEvent) => {
     // 一个标签组同时只编辑一个页面。编辑器负责输入，标签组统一负责写回和状态切换。
-    if (editingIndex >= 0 || addingTab || renderingPanels.has(index)) {
+    if (editingIndex >= 0 || changingTabs || views[index].rendering) {
       return;
     }
     activate(index);
     editingIndex = index;
     element.addClass("is-editing");
-    const panel = panelElements[index];
+    const view = views[index];
+    const panel = view.panel;
     // 原生编辑器初始化会同步测量布局。先保留高度，防止清空长表格时整页短暂变短、
     // 浏览器把已有 scrollTop 裁到 0；初始化完成即释放，后续输入仍自然增高或收缩。
     panel.style.setProperty(
@@ -157,11 +173,11 @@ export function renderTabGroup(
     );
     panel.addClass("is-restoring");
     const originalContent = tabs[index].content;
-    const preview = previews.get(index);
+    const preview = view.preview;
     if (preview) {
-      component.removeChild(preview);
+      view.component.removeChild(preview);
     }
-    previews.delete(index);
+    view.preview = null;
     panel.empty();
     panel.addClass("is-editing");
     let saving = false;
@@ -174,7 +190,7 @@ export function renderTabGroup(
         panel.getBoundingClientRect().height + "px",
       );
       panel.classList.add("is-restoring");
-      component.removeChild(editor);
+      view.component.removeChild(editor);
       try {
         if (panel.isConnected) {
           await renderPanel(index);
@@ -244,14 +260,86 @@ export function renderTabGroup(
       panel,
       sourcePath: context.sourcePath,
       source: originalContent,
-      highlighting: panelHighlighting.get(index) ?? null,
+      highlighting: view.highlighting,
       click,
       addButton,
       onSave: save,
       onCancel: cancel,
     };
-    const editor = component.addChild(new TabEditor(options));
+    const editor = view.component.addChild(new TabEditor(options));
     saveCurrentEditor = save;
+  };
+
+  /** title 为 null 表示删除；其余情况只替换标题，正文保持原样。 */
+  const changeTab = async (index: number, title: string | null): Promise<boolean> => {
+    if (changingTabs || index < 0) {
+      return false;
+    }
+    changingTabs = true;
+    addButton.disabled = true;
+    const previousIndex = activeIndex;
+    try {
+      if (saveCurrentEditor && !(await saveCurrentEditor())) {
+        return false;
+      }
+      const nextTabs = tabs.slice();
+      if (title === null) {
+        nextTabs.splice(index, 1);
+      } else {
+        const renamed: TabData = {
+          title,
+          content: tabs[index].content,
+        };
+        nextTabs[index] = renamed;
+      }
+      let nextIndex = activeIndex;
+      if (title === null && index <= activeIndex) {
+        if (index < activeIndex) {
+          nextIndex = activeIndex - 1;
+        } else {
+          nextIndex = Math.min(index, nextTabs.length - 1);
+        }
+      }
+      const nextSource = nextTabs.length ? serializeTabs(nextTabs) : null;
+      // 先记住选择，以便宿主因文件变化重建组件后仍选中同一个剩余标签。
+      if (nextIndex < 0) {
+        plugin.activeTabs.delete(group.id);
+      } else {
+        plugin.activeTabs.set(group.id, nextIndex);
+      }
+      await updateMarkdownSource(
+        plugin.app,
+        context.sourcePath,
+        group.lineStart,
+        source,
+        nextSource,
+      );
+      tabs = nextTabs;
+      source = nextSource ?? "";
+      if (title === null) {
+        const removed = views.splice(index, 1)[0];
+        component.removeChild(removed.component);
+        removed.button.remove();
+        removed.panel.remove();
+      } else {
+        views[index].button.textContent = title;
+      }
+      if (!tabs.length) {
+        element.remove();
+      } else if (element.isConnected) {
+        // 标题失焦保存期间，用户可能已点了另一页；重命名不能把选择切回去。
+        activate(title === null ? nextIndex : activeIndex);
+      }
+      return true;
+    } catch (error) {
+      plugin.activeTabs.set(group.id, previousIndex);
+      console.error("Code Tab: failed to change tab", error);
+      new Notice(error instanceof Error ? error.message : "标签修改失败", 5000);
+      return false;
+    } finally {
+      changingTabs = false;
+      addButton.disabled = false;
+    }
   };
 
   const createTabElements = (tab: TabData, index: number) => {
@@ -266,8 +354,9 @@ export function renderTabGroup(
     button.textContent = tab.title;
     button.setAttribute("role", "tab");
     button.setAttribute("aria-controls", panelId);
-    component.registerDomEvent(button, "click", () => activate(index));
-    component.registerDomEvent(button, "keydown", (event) => {
+    const tabComponent = component.addChild(new Component());
+    tabComponent.registerDomEvent(button, "click", () => activate(views.indexOf(view)));
+    tabComponent.registerDomEvent(button, "keydown", (event) => {
       // 使用 WAI-ARIA tabs 常见键位，鼠标之外也能完整切换标签。
       if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
         return;
@@ -290,7 +379,6 @@ export function renderTabGroup(
       activate(next, true);
     });
     tabList.insertBefore(button, addButton);
-    buttons.push(button);
 
     const panel = document.createElement("div");
     panel.className = "code-tab__panel markdown-rendered";
@@ -300,10 +388,27 @@ export function renderTabGroup(
     panel.setAttribute("aria-labelledby", tabId);
     panel.hidden = true;
     panels.appendChild(panel);
-    panelElements.push(panel);
-
+    const view: TabView = {
+      button,
+      panel,
+      component: tabComponent,
+      preview: null,
+      highlighting: null,
+      rendering: false,
+    };
+    views.push(view);
+    const actions: TabActionsOptions = {
+      app: plugin.app,
+      component: tabComponent,
+      button,
+      canStart: () => !changingTabs && editingIndex < 0,
+      isLastTab: () => tabs.length === 1,
+      onRename: (title) => changeTab(views.indexOf(view), title),
+      onDelete: () => changeTab(views.indexOf(view), null),
+    };
+    attachTabActions(actions);
     renderPanel(index);
-    component.registerDomEvent(panel, "click", (event) => {
+    tabComponent.registerDomEvent(panel, "click", (event) => {
       if (editingIndex >= 0) {
         return;
       }
@@ -325,15 +430,15 @@ export function renderTabGroup(
       } else if (target.closest("a, button, input, textarea, select")) {
         return;
       }
-      startEditing(index, event);
+      startEditing(views.indexOf(view), event);
     });
   };
 
   component.registerDomEvent(addButton, "click", async () => {
-    if (addingTab) {
+    if (changingTabs) {
       return;
     }
-    addingTab = true;
+    changingTabs = true;
     addButton.disabled = true;
     const previousIndex = activeIndex;
     try {
@@ -370,14 +475,14 @@ export function renderTabGroup(
           block: "nearest",
           inline: "nearest",
         };
-        buttons[index].scrollIntoView(scrollOptions);
+        views[index].button.scrollIntoView(scrollOptions);
       }
     } catch (error) {
       plugin.activeTabs.set(group.id, previousIndex);
       console.error("Code Tab: failed to add tab", error);
       new Notice(error instanceof Error ? error.message : "新增标签失败", 5000);
     } finally {
-      addingTab = false;
+      changingTabs = false;
       addButton.disabled = false;
     }
   });

@@ -319,3 +319,26 @@ test("文件缺失、目录和非 Markdown 文件不会写入", async () => {
     assert.deepEqual(vault.calls, [["lookup", "示例.md"]]);
   }
 });
+
+for (const newline of ["\n", "\r\n"]) {
+  test("删除整个标签块时只移除目标，并保留其他内容与换行 " + JSON.stringify(newline), async () => {
+    const source = "tab: 最后一页\n内容";
+    const target = createTabFence(source, "`", "", newline);
+    const other = createTabFence("tab: 保留\nuntouched", "`", "", newline);
+    const prefix = "前文" + newline;
+    const suffix = newline + "后文" + newline + other + newline;
+    const vault = createVault(prefix + target + suffix);
+    await updateMarkdownSource(vault.app, "Test.md", 1, source, null);
+    assert.equal(vault.content(), prefix + suffix);
+  });
+}
+
+test("删除也必须匹配旧内容，冲突时不移除文件中的块", async () => {
+  const content = createTabFence("tab: 最后一页\n其他窗口的新内容", "`", "");
+  const vault = createVault(content);
+  await assert.rejects(
+    updateMarkdownSource(vault.app, "Test.md", 0, "tab: 最后一页\n旧内容", null),
+    /已发生变化/,
+  );
+  assert.equal(vault.content(), content);
+});

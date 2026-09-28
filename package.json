@@ -9,7 +9,7 @@
     "dev": "node esbuild.config.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.mjs",
-    "test:obsidian": "npm run build && node tests/obsidian/inline-edit.mjs && node tests/obsidian/tab-controls.mjs && node tests/obsidian/markdown-content.mjs",
+    "test:obsidian": "npm run build && node tests/obsidian/inline-edit.mjs && node tests/obsidian/tab-controls.mjs && node tests/obsidian/markdown-content.mjs && node tests/obsidian/tab-actions.mjs",
     "lint": "eslint . && prettier --check src \"tests/**/*.mjs\" \"*.mjs\" package.json tsconfig.json .prettierrc.json",
     "lint:fix": "eslint . --fix && prettier --write src \"tests/**/*.mjs\" \"*.mjs\" package.json tsconfig.json .prettierrc.json",
     "prepare": "simple-git-hooks"

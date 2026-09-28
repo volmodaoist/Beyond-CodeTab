@@ -147,7 +147,7 @@ export async function updateMarkdownSource(
   sourcePath: string,
   expectedLine: number,
   previousSource: string,
-  nextSource: string,
+  nextSource: string | null,
 ): Promise<void> {
   const file = app.vault.getAbstractFileByPath(sourcePath);
   if (!isMarkdownFile(file)) {
@@ -162,7 +162,11 @@ export async function updateMarkdownSource(
       return fileContent;
     }
     replaced = true;
-    const replacement = createTabFence(nextSource, block.marker, block.indent, block.newline);
+    // 删除最后一个标签时用 null 明确表示移除整个块，仍使用相同的旧内容冲突检查。
+    const replacement =
+      nextSource === null
+        ? ""
+        : createTabFence(nextSource, block.marker, block.indent, block.newline);
     return fileContent.slice(0, block.start) + replacement + fileContent.slice(block.end);
   };
 

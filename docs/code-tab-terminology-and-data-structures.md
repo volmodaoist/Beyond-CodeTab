@@ -156,7 +156,7 @@ const fenceMatch = line.match(/^ {0,3}([\x60~]{3,})(.*)$/);
 | `activeTabs` | 插件实例上的 `Map<string, number>` | 保存标签组 ID 到选中标签索引的映射 |
 | `activeIndex` | 从 `0` 开始的标签索引 | 当前显示哪个标签 |
 | `editingIndex` | `-1` 或从 `0` 开始的标签索引 | `-1` 表示没有编辑会话，其他值表示正在编辑的标签 |
-| `buttons` / `panelElements` | DOM 元素数组 | 与标签数组按索引对应，分别承载标题按钮和正文面板 |
+| `views: TabView[]` | 标签视图数组 | 每项关联按钮、面板、预览和生命周期；删除时一起释放，事件按视图查找当前序号 |
 | `component` | `MarkdownRenderChild` | 将事件和子组件纳入该代码块的生命周期 |
 
 `context.getSectionInfo(element)` 可能返回 `null`，当前 `getGroupInfo()` 会将起始行暂记为 `0`。`group.id` 依赖行号，前文插入内容后可能变化；它不是写进笔记的永久 ID。`safeId(group.id)` 生成供 DOM ID 使用的短哈希后缀，不用于文件定位，也不保证全局唯一。
