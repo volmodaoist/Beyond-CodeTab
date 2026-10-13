@@ -67,19 +67,28 @@ async function waitForPreview() {
   await settleLayout();
 }
 
-async function paste(text) {
+async function paste(text, html = null) {
   // 通过原生 paste 事件走宿主的剪贴板处理逻辑，不改动系统剪贴板。
-  await page.evaluate((text) => {
-    const data = new DataTransfer();
-    data.setData("text/plain", text);
-    window.codeTabTestEmbed.editor.cm.contentDOM.dispatchEvent(
-      new ClipboardEvent("paste", {
-        bubbles: true,
-        cancelable: true,
-        clipboardData: data,
-      }),
-    );
-  }, text);
+  await page.evaluate(
+    ({ text, html }) => {
+      const data = new DataTransfer();
+      data.setData("text/plain", text);
+      if (html !== null) {
+        data.setData("text/html", html);
+      }
+      window.codeTabTestEmbed.editor.cm.contentDOM.dispatchEvent(
+        new ClipboardEvent("paste", {
+          bubbles: true,
+          cancelable: true,
+          clipboardData: data,
+        }),
+      );
+    },
+    {
+      text,
+      html,
+    },
+  );
 }
 
 async function snapshot() {
@@ -310,6 +319,45 @@ try {
       }
     }
   }
+
+  // 网页与 VS Code 的剪贴板通常同时含 HTML 和纯文本。纯代码标签必须忽略富文本行节点，
+  // 否则宿主的 Markdown 转换可能把每行变成段落，并丢失前导空格。
+  await setNoteMarkdown(initial);
+  await page.waitForFunction(() => {
+    const visible = [...document.querySelectorAll(".code-tab")].find((el) => el.checkVisibility());
+    return (
+      visible?.querySelector(".code-tab__panel:not([hidden]) pre code")?.textContent.trim() ===
+      'print("hello tab1")'
+    );
+  });
+  await settleLayout();
+  await enterEditor();
+  await page.keyboard.press("Meta+A");
+  const richCode = [
+    "class Solution:",
+    "    def reverse(self, x: int) -> int:",
+    "        ans = 0",
+    "        while x:",
+    "            ans = ans * 10 + x % 10",
+    "            x //= 10",
+    "        return ans",
+  ].join("\r\n");
+  const richHtml =
+    '<div class="view-line">class Solution:</div>' +
+    '<div class="view-line">&nbsp;&nbsp;&nbsp;&nbsp;def reverse(self, x: int) -&gt; int:</div>' +
+    '<div class="view-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ans = 0</div>' +
+    '<div class="view-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;while x:</div>' +
+    '<div class="view-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ans = ans * 10 + x % 10</div>' +
+    '<div class="view-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;x //= 10</div>' +
+    '<div class="view-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return ans</div>';
+  await paste(richCode, richHtml);
+  assert.equal(
+    await editorContent(),
+    "```python\n" + richCode.replaceAll("\r\n", "\n") + "\n```",
+    "富文本代码粘贴应保留原始缩进，且不能在行间插入空行",
+  );
+  await page.keyboard.press("Escape");
+  await waitForPreview();
 
   // 混合 Markdown 应保留全部源码；纯代码逻辑不能隐藏段落或第二个代码块。
   await group

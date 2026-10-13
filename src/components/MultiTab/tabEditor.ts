@@ -248,6 +248,32 @@ export class TabEditor extends Component {
   private registerInputEvents() {
     const panel = this.options.panel;
     const editorWindow = panel.ownerDocument.defaultView;
+    const pastePlainCode = (event: ClipboardEvent) => {
+      const view = this.native?.editor?.cm;
+      if (
+        this.content.kind !== "code" ||
+        !view ||
+        !event.composedPath().includes(view.contentDOM)
+      ) {
+        return;
+      }
+      const text = event.clipboardData?.getData("text/plain");
+      if (!text) {
+        return;
+      }
+
+      // LeetCode、VS Code 等会同时提供 text/html 与 text/plain。宿主把 HTML 行节点
+      // 转成 Markdown 段落时会插入空行，并丢失只存在于 DOM/CSS 中的缩进；纯代码标签
+      // 不需要富文本语义，直接插入纯文本才能原样保留换行、空格和 Tab。
+      event.preventDefault();
+      event.stopPropagation();
+      const normalized = text.replace(/\r\n?/g, "\n");
+      view.dispatch(view.state.replaceSelection(normalized));
+    };
+    // 必须在捕获阶段先于 CodeMirror 和 Obsidian 的 Markdown 粘贴处理器执行。
+    this.host.addEventListener("paste", pastePlainCode, true);
+    this.register(() => this.host.removeEventListener("paste", pastePlainCode, true));
+
     const keydown = (event: KeyboardEvent) => {
       if (!event.composedPath().includes(panel)) {
         return;
