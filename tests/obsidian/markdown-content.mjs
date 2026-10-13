@@ -350,16 +350,119 @@ try {
       );
     });
     await show("![[Drawing.excalidraw.md]]");
-    await panel.locator(".excalidraw-svg, .excalidraw-embedded-img").first().waitFor({
+    const excalidrawEmbed = panel.locator(".excalidraw-svg, .excalidraw-embedded-img").first();
+    await excalidrawEmbed.waitFor({
       timeout: 30000,
     });
+    const assertExcalidrawFillsPanel = async (label) => {
+      const widths = await panel.evaluate((element) => {
+        const drawing = element.querySelector(".excalidraw-svg, .excalidraw-embedded-img");
+        return {
+          panel: element.clientWidth,
+          drawing: drawing?.getBoundingClientRect().width ?? 0,
+        };
+      });
+      assert.ok(
+        widths.drawing >= widths.panel * 0.9,
+        `${label} 应铺满面板：${widths.drawing} / ${widths.panel}`,
+      );
+    };
+    await assertExcalidrawFillsPanel("单画板");
     await group.screenshot({
       path: join(directory, "excalidraw-embed.png"),
     });
-    await panel.locator(".excalidraw-svg, .excalidraw-embedded-img").first().click();
+    await excalidrawEmbed.click();
     assert.equal(await editor.count(), 0);
     assert.equal(await fileContent(), wrap("![[Drawing.excalidraw.md]]"));
     console.log("PASS real Excalidraw embed");
+
+    await show("画板说明\n\n![[Drawing.excalidraw.md]]");
+    await panel.locator(".excalidraw-svg, .excalidraw-embedded-img").first().waitFor({
+      timeout: 30000,
+    });
+    assert.equal(await panel.getByTestId("code-tab-frame-deck").count(), 0);
+    await assertExcalidrawFillsPanel("复合 Markdown 中的画板");
+    console.log("PASS composite Markdown Excalidraw width");
+
+    const frameDeckFixture = await readFile(
+      new URL("../fixtures/Frame-Deck-三阶段架构演进.excalidraw.md", import.meta.url),
+      "utf8",
+    );
+    await page.evaluate(async (drawing) => {
+      await app.vault.create("Deck.excalidraw.md", drawing);
+    }, frameDeckFixture);
+    await show("![[Deck.excalidraw.md]]");
+    const deck = panel.getByTestId("code-tab-frame-deck");
+    await deck.waitFor({
+      timeout: 30000,
+    });
+    const counter = deck.locator(".code-tab__frame-counter");
+    await counter
+      .filter({
+        hasText: "1 / 3",
+      })
+      .waitFor({
+        timeout: 30000,
+      });
+    const previous = deck.getByRole("button", {
+      name: "上一页",
+    });
+    const next = deck.getByRole("button", {
+      name: "下一页",
+    });
+    assert.equal(await counter.innerText(), "1 / 3");
+    assert.equal(await previous.isEnabled(), true);
+    assert.equal(await next.isEnabled(), true);
+    await previous.click();
+    await counter
+      .filter({
+        hasText: "3 / 3",
+      })
+      .waitFor();
+    await next.click();
+    await counter
+      .filter({
+        hasText: "1 / 3",
+      })
+      .waitFor();
+    await next.click();
+    await counter
+      .filter({
+        hasText: "2 / 3",
+      })
+      .waitFor();
+    assert.equal(await previous.isEnabled(), true);
+    assert.equal(await next.isEnabled(), true);
+    assert.equal(await editor.count(), 0, "翻页按钮不能进入源码编辑态");
+    assert.deepEqual(
+      await page.evaluate(() => [
+        ...app.plugins.plugins["obsidian-code-tab"].activeFrames.values(),
+      ]),
+      ["frame-2"],
+    );
+    await next.click();
+    await counter
+      .filter({
+        hasText: "3 / 3",
+      })
+      .waitFor();
+    assert.equal(await next.isEnabled(), true);
+    await next.click();
+    await counter
+      .filter({
+        hasText: "1 / 3",
+      })
+      .waitFor();
+    await previous.click();
+    await counter
+      .filter({
+        hasText: "3 / 3",
+      })
+      .waitFor();
+    await group.screenshot({
+      path: join(directory, "excalidraw-frame-deck.png"),
+    });
+    console.log("PASS Excalidraw Frame Deck navigation");
   } else {
     console.log("SKIP Excalidraw: set CODE_TAB_EXCALIDRAW_PLUGIN to its local plugin directory");
   }

@@ -27,9 +27,12 @@ export default class CodeTabPlugin extends Plugin {
   // key 为“文件路径 + tab 块起始行”，value 为当前选中的标签序号。
   // 状态仅存在于内存中，避免为了 UI 状态污染用户的 Markdown。
   activeTabs = new Map<string, number>();
+  // key 同时包含 tab 块、标签序号和画板路径；value 始终使用稳定的 Frame ID。
+  activeFrames = new Map<string, string>();
 
   async onload() {
     this.activeTabs.clear();
+    this.activeFrames.clear();
 
     this.registerMarkdownCodeBlockProcessor("tab", (source, element, context) => {
       // 每个渲染出来的 tab 块都绑定一个生命周期组件。块离开页面时，
@@ -52,5 +55,6 @@ export default class CodeTabPlugin extends Plugin {
 
   onunload() {
     this.activeTabs.clear();
+    this.activeFrames.clear();
   }
 }

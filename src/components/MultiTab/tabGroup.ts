@@ -138,11 +138,12 @@ export function renderTabGroup(
     view.preview = preview;
     try {
       const highlighting = await renderTabPreview(
-        plugin.app,
+        plugin,
         preview,
         panel,
         context.sourcePath,
         tabs[index].content,
+        group.id + ":" + index,
       );
       if (highlighting) {
         view.highlighting = highlighting;

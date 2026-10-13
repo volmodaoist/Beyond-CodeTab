@@ -205,6 +205,22 @@
   margin-bottom: 0 !important;
 }
 
+/* Excalidraw 默认按导出图的固有像素宽度渲染。Code Tab 面板更像独立页面，未显式限定
+   尺寸的单画板与复合 Markdown 画板都应使用完整正文宽度，与 Frame Deck 保持一致。 */
+.code-tab__panel .internal-embed:has(.excalidraw-svg, .excalidraw-embedded-img),
+.code-tab__panel .excalidraw-svg,
+.code-tab__panel .excalidraw-embedded-img {
+  display: block;
+  box-sizing: border-box;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.code-tab__panel img.excalidraw-embedded-img,
+.code-tab__panel svg.excalidraw-svg {
+  height: auto !important;
+}
+
 .code-tab__panel.is-editing {
   /* 字体和留白与预览一致；高度交给正文决定，回车/粘贴后自然向下扩展。 */
   min-height: 0;
@@ -213,6 +229,132 @@
 .code-tab__panel.is-restoring {
   /* 只在预览/编辑器交接时保持高度，防止 DOM 暂时为空导致整页滚动位置被裁短。 */
   min-height: var(--code-tab-restore-height);
+}
+
+/* Frame Deck 的控制器属于 Code Tab，不依赖 Excalidraw 内部 DOM；右侧为画板自身按钮留位。 */
+.code-tab__frame-deck {
+  position: relative;
+  min-width: 0;
+}
+
+.code-tab__frame-controls {
+  position: absolute;
+  z-index: 5;
+  inset-block-start: 0.35rem;
+  inset-inline-end: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  min-height: 1.75rem;
+  padding: 0.15rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 5px;
+  background: var(--background-primary-alt);
+  box-shadow: var(--shadow-s);
+}
+
+.code-tab__frame-controls.is-hidden {
+  display: none;
+}
+
+.code-tab__frame-button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 1.65rem;
+  height: 1.45rem;
+  margin: 0;
+  padding: 0.2rem;
+  border: 0 !important;
+  border-radius: 3px;
+  background: transparent !important;
+  color: var(--text-muted);
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+.code-tab__frame-button:hover:not(:disabled) {
+  background: var(--background-modifier-hover) !important;
+  color: var(--text-normal);
+}
+
+.code-tab__frame-button:focus-visible {
+  outline: 2px solid var(--background-modifier-border-focus);
+  outline-offset: -1px;
+}
+
+.code-tab__frame-button:disabled {
+  color: var(--text-faint);
+  cursor: default;
+  opacity: 0.6;
+}
+
+.code-tab__frame-button .svg-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.code-tab__frame-counter {
+  min-width: 3.25rem;
+  padding-inline: 0.2rem;
+  color: var(--text-muted);
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: center;
+  user-select: none;
+}
+
+.code-tab__frame-viewport {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.code-tab__frame-page {
+  grid-area: 1 / 1;
+  min-width: 0;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease;
+  will-change: transform, opacity;
+}
+
+.code-tab__frame-page.is-entering-right {
+  opacity: 0;
+  transform: translateX(12%);
+}
+
+.code-tab__frame-page.is-entering-left {
+  opacity: 0;
+  transform: translateX(-12%);
+}
+
+.code-tab__frame-page.is-entering-right.is-active,
+.code-tab__frame-page.is-entering-left.is-active {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.code-tab__frame-page.is-leaving-left.is-active {
+  opacity: 0;
+  transform: translateX(-12%);
+}
+
+.code-tab__frame-page.is-leaving-right.is-active {
+  opacity: 0;
+  transform: translateX(12%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .code-tab__frame-page {
+    transition-duration: 0ms;
+  }
 }
 
 .code-tab__native-editor {
