@@ -104,13 +104,19 @@ Code Tab 仍通过 `MarkdownRenderer` 渲染这个 fragment。Excalidraw 可以�
 ```text
 src/components/MultiTab/
 ├── excalidrawFrame.ts       # 纯解析、排序和 fragment 构造
-├── excalidrawFrameDeck.ts   # Excalidraw API、DOM、翻页与生命周期
+├── excalidrawApi.ts         # 第三方插件发现、版本兼容与场景读取
+├── excalidrawFrameDeck.ts   # DOM、翻页、状态刷新与生命周期
+├── excalidrawFrameDeck.css  # 画板宽度、控制器和页面动画
 ├── tabPreview.ts            # 选择 Frame Deck 或默认渲染器
 ├── tabGroup.ts
 └── styles.css
 ```
 
 `excalidrawFrame.ts` 不依赖 Obsidian，便于使用 Node 单元测试覆盖边界。
+
+`excalidrawApi.ts` 是唯一允许访问 `app.plugins`、`plugin.ea` 和 `plugin.getEA()`
+等非公开入口的模块。Excalidraw 升级导致接口形状变化时，只调整该适配层；其余组件只依赖
+`ExcalidrawSceneSource.getElements()`。
 
 `ExcalidrawFrameDeck` 作为当前 tab 预览 `Component` 的子组件，负责：
 
@@ -131,12 +137,15 @@ src/components/MultiTab/
 3. 两个页面放在同一 CSS Grid 区域；
 4. 下一页从右侧进入，上一页从左侧进入；
 5. 当前页向相反方向退出；
-6. `transitionend` 或超时兜底后，释放旧页面的 Component；
+6. 动画时长结束后释放旧页面的 Component；组件提前卸载时主动结束等待；
 7. 更新当前 Frame ID、页码和按钮状态。
 
 动画只使用 `transform` 和 `opacity`，不操作 Excalidraw 摄像机。系统启用 `prefers-reduced-motion: reduce` 时取消位移动画。
 
 快速重复点击期间忽略新导航，防止多个异步 MarkdownRenderer 互相覆盖。
+
+普通单画板、复合 Markdown 画板和 Frame Deck 共用 `excalidrawFrameDeck.css` 中的宽度
+规则。选择器限制在 `.code-tab__panel` 内，不改变笔记其他位置的 Excalidraw 或普通图片。
 
 ## 7. 状态与文件更新
 
@@ -184,7 +193,16 @@ activeFrames: Map<string, string>
 
 降级不弹 Notice，避免普通笔记因可选增强不可用而产生噪声；开发信息写入 `console.warn`。
 
-## 10. 验证
+## 10. 维护边界
+
+- 存储格式与压缩算法属于 Excalidraw，不得在 Code Tab 中实现；
+- 插件私有入口和版本兼容只进入 `excalidrawApi.ts`；
+- Frame 的解析、排序和 fragment 构造只进入 `excalidrawFrame.ts`；
+- 两页交接顺序、动画锁和 Component 释放保留在 `ExcalidrawFrameDeck`，不拆成事件总线；
+- 画板专用样式只进入 `excalidrawFrameDeck.css`，最终仍由 esbuild 合并为一个样式文件；
+- 新增缩略图、自动播放或键盘演示模式前，再评估是否抽取独立导航状态机。
+
+## 11. 验证
 
 单元测试覆盖：
 

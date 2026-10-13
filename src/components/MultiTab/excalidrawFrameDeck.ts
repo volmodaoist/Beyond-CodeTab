@@ -1,4 +1,4 @@
-import { Component, MarkdownRenderer, setIcon, TFile } from "obsidian";
+import { Component, MarkdownRenderer, setIcon } from "obsidian";
 import type { App } from "obsidian";
 import {
   buildExcalidrawFrameEmbed,
@@ -6,39 +6,24 @@ import {
   sortExcalidrawFrames,
 } from "./excalidrawFrame";
 import type { ExcalidrawEmbed, ExcalidrawFrame } from "./excalidrawFrame";
+import { resolveExcalidrawSceneSource } from "./excalidrawApi";
+import type { ExcalidrawSceneSource } from "./excalidrawApi";
 
-const EXCALIDRAW_PLUGIN_ID = "obsidian-excalidraw-plugin";
 const ANIMATION_DURATION = 220;
 const FILE_REFRESH_DELAY = 160;
-
-interface ExcalidrawScene {
-  elements: ExcalidrawFrame[];
-}
-
-interface ExcalidrawApi {
-  isExcalidrawFile(file: TFile): boolean;
-  getSceneFromFile(file: TFile): Promise<ExcalidrawScene>;
-}
-
-interface ExcalidrawApiCandidate {
-  isExcalidrawFile?: (file: TFile) => boolean;
-  getSceneFromFile?: (file: TFile) => Promise<ExcalidrawScene>;
-}
-
-interface ExcalidrawPluginCandidate extends ExcalidrawApiCandidate {
-  ea?: ExcalidrawApiCandidate;
-  getEA?: () => ExcalidrawApiCandidate;
-}
-
-interface AppWithPlugins extends App {
-  plugins?: {
-    getPlugin(id: string): unknown;
-  };
-}
 
 interface RenderedPage {
   element: HTMLDivElement;
   component: Component;
+}
+
+interface FrameDeckElements {
+  root: HTMLDivElement;
+  viewport: HTMLDivElement;
+  controls: HTMLDivElement;
+  previousButton: HTMLButtonElement;
+  nextButton: HTMLButtonElement;
+  counter: HTMLSpanElement;
 }
 
 export interface ExcalidrawFrameDeckOptions {
@@ -50,57 +35,31 @@ export interface ExcalidrawFrameDeckOptions {
   activeFrames: Map<string, string>;
 }
 
-function getExcalidrawApi(app: App): ExcalidrawApi | null {
-  const plugin = (app as AppWithPlugins).plugins?.getPlugin(EXCALIDRAW_PLUGIN_ID) as
-    ExcalidrawPluginCandidate | undefined;
-  if (!plugin) {
-    return null;
-  }
-
-  const automate = plugin.ea ?? plugin.getEA?.() ?? plugin;
-  const fileOwner = automate.isExcalidrawFile ? automate : plugin;
-  const sceneOwner = automate.getSceneFromFile ? automate : plugin;
-  if (!fileOwner.isExcalidrawFile || !sceneOwner.getSceneFromFile) {
-    return null;
-  }
-
-  return {
-    isExcalidrawFile: (file) => Boolean(fileOwner.isExcalidrawFile?.call(fileOwner, file)),
-    getSceneFromFile: (file) => sceneOwner.getSceneFromFile!.call(sceneOwner, file),
-  };
-}
-
 export class ExcalidrawFrameDeck extends Component {
   private readonly options: ExcalidrawFrameDeckOptions;
   private readonly embed: ExcalidrawEmbed;
-  private readonly file: TFile;
-  private readonly api: ExcalidrawApi;
+  private readonly sceneSource: ExcalidrawSceneSource;
   private readonly stateKey: string;
   private frames: ExcalidrawFrame[] = [];
   private currentFrameId: string | null = null;
   private currentPage: RenderedPage | null = null;
-  private root: HTMLDivElement | null = null;
-  private viewport: HTMLDivElement | null = null;
-  private controls: HTMLDivElement | null = null;
-  private previousButton: HTMLButtonElement | null = null;
-  private nextButton: HTMLButtonElement | null = null;
-  private counter: HTMLSpanElement | null = null;
+  private elements: FrameDeckElements | null = null;
   private moving = false;
   private refreshTimer: number | null = null;
   private animationTimer: number | null = null;
+  private finishAnimation: (() => void) | null = null;
+  private unloaded = false;
 
   private constructor(
     options: ExcalidrawFrameDeckOptions,
     embed: ExcalidrawEmbed,
-    file: TFile,
-    api: ExcalidrawApi,
+    sceneSource: ExcalidrawSceneSource,
   ) {
     super();
     this.options = options;
     this.embed = embed;
-    this.file = file;
-    this.api = api;
-    this.stateKey = options.stateKeyPrefix + ":" + file.path;
+    this.sceneSource = sceneSource;
+    this.stateKey = options.stateKeyPrefix + ":" + sceneSource.file.path;
   }
 
   static async create(options: ExcalidrawFrameDeckOptions): Promise<ExcalidrawFrameDeck | null> {
@@ -110,24 +69,21 @@ export class ExcalidrawFrameDeck extends Component {
     }
 
     try {
-      const api = getExcalidrawApi(options.app);
-      if (!api) {
-        return null;
-      }
-      const file = options.app.metadataCache.getFirstLinkpathDest(
+      // 工厂阶段只探测能力和读取 Frame，不创建 DOM。返回 null 后调用方可无痕走普通预览。
+      const sceneSource = resolveExcalidrawSceneSource(
+        options.app,
         embed.linkPath,
         options.sourcePath,
       );
-      if (!(file instanceof TFile) || !api.isExcalidrawFile(file)) {
+      if (!sceneSource) {
         return null;
       }
-      const scene = await api.getSceneFromFile(file);
-      const frames = sortExcalidrawFrames(scene.elements);
+      const frames = sortExcalidrawFrames(await sceneSource.getElements());
       if (frames.length < 2) {
         return null;
       }
 
-      const deck = new ExcalidrawFrameDeck(options, embed, file, api);
+      const deck = new ExcalidrawFrameDeck(options, embed, sceneSource);
       deck.frames = frames;
       return deck;
     } catch (error) {
@@ -137,16 +93,20 @@ export class ExcalidrawFrameDeck extends Component {
   }
 
   async initialize(): Promise<void> {
-    this.createElements();
+    // 组件被父预览 addChild 后才初始化，使页面 Component、DOM 事件和 Vault 监听共享同一生命周期。
+    this.elements = this.createElements();
     const rememberedFrame = this.options.activeFrames.get(this.stateKey);
     const initialFrame =
       this.frames.find((frame) => frame.id === rememberedFrame) ?? this.frames[0];
     await this.replaceCurrent(buildExcalidrawFrameEmbed(this.embed, initialFrame.id));
+    if (this.unloaded) {
+      return;
+    }
     this.setCurrentFrame(initialFrame.id);
 
     this.registerEvent(
       this.options.app.vault.on("modify", (file) => {
-        if (file.path === this.file.path) {
+        if (file.path === this.sceneSource.file.path) {
           this.scheduleRefresh();
         }
       }),
@@ -154,16 +114,17 @@ export class ExcalidrawFrameDeck extends Component {
   }
 
   onunload(): void {
+    this.unloaded = true;
     if (this.refreshTimer !== null) {
       window.clearTimeout(this.refreshTimer);
     }
-    if (this.animationTimer !== null) {
-      window.clearTimeout(this.animationTimer);
-    }
-    this.root?.remove();
+    // 解除仍在等待的动画 Promise，避免组件卸载后保留整棵预览 DOM 的闭包引用。
+    this.finishAnimation?.();
+    this.elements?.root.remove();
+    this.elements = null;
   }
 
-  private createElements(): void {
+  private createElements(): FrameDeckElements {
     const root = document.createElement("div");
     root.className = "code-tab__frame-deck";
     root.setAttribute("data-testid", "code-tab-frame-deck");
@@ -199,12 +160,6 @@ export class ExcalidrawFrameDeck extends Component {
     root.appendChild(viewport);
     this.options.panel.appendChild(root);
 
-    this.root = root;
-    this.controls = controls;
-    this.previousButton = previousButton;
-    this.nextButton = nextButton;
-    this.counter = counter;
-    this.viewport = viewport;
     this.registerDomEvent(previousButton, "click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -215,6 +170,14 @@ export class ExcalidrawFrameDeck extends Component {
       event.stopPropagation();
       void this.move(1);
     });
+    return {
+      root,
+      viewport,
+      controls,
+      previousButton,
+      nextButton,
+      counter,
+    };
   }
 
   private async renderPage(source: string, initialClass?: string): Promise<RenderedPage> {
@@ -224,7 +187,11 @@ export class ExcalidrawFrameDeck extends Component {
       element.classList.add(initialClass);
     }
     element.setAttribute("data-testid", "code-tab-frame-page");
-    this.viewport?.appendChild(element);
+    if (!this.elements) {
+      throw new Error("Excalidraw Frame Deck has not been initialized");
+    }
+    this.elements.viewport.appendChild(element);
+    // 每页使用独立子 Component；翻页完成后释放旧页时，第三方渲染器注册的资源也一并清理。
     const component = this.addChild(new Component());
     try {
       await MarkdownRenderer.render(
@@ -266,16 +233,14 @@ export class ExcalidrawFrameDeck extends Component {
   }
 
   private updateControls(): void {
+    if (!this.elements) {
+      return;
+    }
     const index = this.frames.findIndex((frame) => frame.id === this.currentFrameId);
-    if (this.previousButton) {
-      this.previousButton.disabled = this.moving || index < 0;
-    }
-    if (this.nextButton) {
-      this.nextButton.disabled = this.moving || index < 0;
-    }
-    if (this.counter) {
-      this.counter.textContent = index < 0 ? "– / –" : index + 1 + " / " + this.frames.length;
-    }
+    this.elements.previousButton.disabled = this.moving || index < 0;
+    this.elements.nextButton.disabled = this.moving || index < 0;
+    this.elements.counter.textContent =
+      index < 0 ? "– / –" : index + 1 + " / " + this.frames.length;
   }
 
   private async move(direction: -1 | 1): Promise<void> {
@@ -305,6 +270,10 @@ export class ExcalidrawFrameDeck extends Component {
       incoming.element.classList.add("is-active");
       outgoing.element.classList.add("is-active");
       await this.waitForAnimation();
+      if (this.unloaded) {
+        incoming = null;
+        return;
+      }
       incoming.element.classList.remove("is-entering-right", "is-entering-left", "is-active");
       this.releasePage(outgoing);
       this.currentPage = incoming;
@@ -323,10 +292,16 @@ export class ExcalidrawFrameDeck extends Component {
 
   private waitForAnimation(): Promise<void> {
     return new Promise((resolve) => {
-      this.animationTimer = window.setTimeout(() => {
+      const finish = () => {
+        if (this.animationTimer !== null) {
+          window.clearTimeout(this.animationTimer);
+        }
         this.animationTimer = null;
+        this.finishAnimation = null;
         resolve();
-      }, ANIMATION_DURATION + 40);
+      };
+      this.finishAnimation = finish;
+      this.animationTimer = window.setTimeout(finish, ANIMATION_DURATION + 40);
     });
   }
 
@@ -347,20 +322,21 @@ export class ExcalidrawFrameDeck extends Component {
     }
 
     try {
-      const scene = await this.api.getSceneFromFile(this.file);
-      const frames = sortExcalidrawFrames(scene.elements);
+      const previousIndex = this.frames.findIndex((frame) => frame.id === this.currentFrameId);
+      const frames = sortExcalidrawFrames(await this.sceneSource.getElements());
       this.frames = frames;
       if (frames.length < 2) {
-        this.controls?.addClass("is-hidden");
+        this.elements?.controls.addClass("is-hidden");
         this.options.activeFrames.delete(this.stateKey);
         this.currentFrameId = null;
         await this.replaceCurrent(this.options.source);
         return;
       }
 
-      this.controls?.removeClass("is-hidden");
+      this.elements?.controls.removeClass("is-hidden");
       const currentFrame =
-        frames.find((frame) => frame.id === this.currentFrameId) ?? frames[frames.length - 1];
+        frames.find((frame) => frame.id === this.currentFrameId) ??
+        frames[Math.min(Math.max(previousIndex, 0), frames.length - 1)];
       await this.replaceCurrent(buildExcalidrawFrameEmbed(this.embed, currentFrame.id));
       this.setCurrentFrame(currentFrame.id);
     } catch (error) {
