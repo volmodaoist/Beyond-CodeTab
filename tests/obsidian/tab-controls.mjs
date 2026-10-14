@@ -286,6 +286,38 @@ try {
     }
   }
 
+  // 同步文件系统短暂拒绝写入时自动重试；新增动作只应执行一次，不能产生幽灵标签。
+  await reset("preview", "light");
+  await page.evaluate(() => {
+    window.originalCodeTabProcess = app.vault.process;
+    window.transientSaveAttempts = 0;
+    app.vault.process = async function (...args) {
+      window.transientSaveAttempts += 1;
+      if (window.transientSaveAttempts === 1) {
+        const error = new Error("EPERM: simulated Nutstore file coordination");
+        error.code = "EPERM";
+        throw error;
+      }
+      return window.originalCodeTabProcess.apply(this, args);
+    };
+  });
+  await group
+    .getByRole("button", {
+      name: "新增标签",
+    })
+    .click();
+  await group
+    .getByRole("tab", {
+      name: "标签4",
+      exact: true,
+    })
+    .waitFor();
+  assert.equal(await page.evaluate(() => window.transientSaveAttempts), 2);
+  assert.equal((await fileContent()).match(/tab: 标签4/g)?.length, 1);
+  await page.evaluate(() => {
+    app.vault.process = window.originalCodeTabProcess;
+  });
+
   // 模拟回写冲突：保留当前可见 UI，底层文件变更时既不能覆盖文件也不能创建幽灵标签。
   await reset("preview", "light");
   const beforeConflict = await fileContent();

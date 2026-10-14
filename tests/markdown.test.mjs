@@ -28,6 +28,9 @@ function createVault(
   content,
   {
     process = true,
+    processErrors = [],
+    processAfterUpdateErrors = [],
+    modifyErrors = [],
     file = {
       extension: "md",
     },
@@ -48,6 +51,10 @@ function createVault(
     async modify(target, value) {
       assert.equal(target, file);
       calls.push(["modify"]);
+      const error = modifyErrors.shift();
+      if (error) {
+        throw error;
+      }
       current = value;
     },
   };
@@ -55,7 +62,19 @@ function createVault(
     vault.process = async (target, update) => {
       assert.equal(target, file);
       calls.push(["process"]);
-      current = update(current);
+      const error = processErrors.shift();
+      if (error) {
+        throw error;
+      }
+      const updated = update(current);
+      const afterUpdateError = processAfterUpdateErrors.shift();
+      if (afterUpdateError) {
+        if (typeof afterUpdateError.replacementContent === "string") {
+          current = afterUpdateError.replacementContent;
+        }
+        throw afterUpdateError;
+      }
+      current = updated;
       return current;
     };
   }
@@ -299,6 +318,80 @@ test("旧版 Vault 没有 process 时仍可读改写", async () => {
   await updateMarkdownSource(vault.app, "示例.md", 0, previous, next);
   assert.equal(vault.content(), createTabFence(next, backticks, ""));
   assert.deepEqual(vault.calls, [["lookup", "示例.md"], ["read"], ["modify"]]);
+});
+
+function filesystemError(code) {
+  return Object.assign(new Error(code + ": simulated sync filesystem lock"), {
+    code,
+  });
+}
+
+test("同步文件系统短暂拒绝写入时按退避重试并保留精确替换", async () => {
+  const previous = "tab: 示例\n旧内容";
+  const next = "tab: 示例\n新内容";
+  const vault = createVault(createTabFence(previous, backticks, ""), {
+    processErrors: [filesystemError("EPERM"), filesystemError("EBUSY")],
+  });
+  await updateMarkdownSource(vault.app, "示例.md", 0, previous, next);
+  assert.equal(vault.content(), createTabFence(next, backticks, ""));
+  assert.deepEqual(vault.calls, [["lookup", "示例.md"], ["process"], ["process"], ["process"]]);
+});
+
+test("旧版 Vault 的 modify 短暂失败时也重新读取后重试", async () => {
+  const previous = "tab: 示例\n旧内容";
+  const next = "tab: 示例\n新内容";
+  const vault = createVault(createTabFence(previous, backticks, ""), {
+    process: false,
+    modifyErrors: [filesystemError("EAGAIN")],
+  });
+  await updateMarkdownSource(vault.app, "示例.md", 0, previous, next);
+  assert.equal(vault.content(), createTabFence(next, backticks, ""));
+  assert.deepEqual(vault.calls, [
+    ["lookup", "示例.md"],
+    ["read"],
+    ["modify"],
+    ["read"],
+    ["modify"],
+  ]);
+});
+
+test("回调执行后写入失败，重试仍重新检查最新文件内容", async () => {
+  const previous = "tab: 示例\n旧内容";
+  const next = "tab: 示例\n待保存内容";
+  const external = createTabFence("tab: 示例\n外部窗口的新内容", backticks, "");
+  const error = filesystemError("EPERM");
+  error.replacementContent = external;
+  const vault = createVault(createTabFence(previous, backticks, ""), {
+    processAfterUpdateErrors: [error],
+  });
+  await assert.rejects(
+    updateMarkdownSource(vault.app, "示例.md", 0, previous, next),
+    /原标签块已发生变化/,
+  );
+  assert.equal(vault.content(), external);
+  assert.equal(vault.calls.filter(([action]) => action === "process").length, 2);
+});
+
+test("非瞬时错误立即返回，瞬时错误超过次数后保留原文件", async () => {
+  const previous = "tab: 示例\n旧内容";
+  const next = "tab: 示例\n新内容";
+  const permanent = createVault(createTabFence(previous, backticks, ""), {
+    processErrors: [filesystemError("EACCES")],
+  });
+  await assert.rejects(updateMarkdownSource(permanent.app, "示例.md", 0, previous, next), /EACCES/);
+  assert.equal(permanent.calls.filter(([action]) => action === "process").length, 1);
+
+  const exhausted = createVault(createTabFence(previous, backticks, ""), {
+    processErrors: Array.from(
+      {
+        length: 4,
+      },
+      () => filesystemError("EPERM"),
+    ),
+  });
+  await assert.rejects(updateMarkdownSource(exhausted.app, "示例.md", 0, previous, next), /EPERM/);
+  assert.equal(exhausted.calls.filter(([action]) => action === "process").length, 4);
+  assert.equal(exhausted.content(), createTabFence(previous, backticks, ""));
 });
 
 test("文件缺失、目录和非 Markdown 文件不会写入", async () => {

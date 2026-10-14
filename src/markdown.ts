@@ -8,6 +8,32 @@ interface FenceLine {
   suffix: string; // 围栏之后的原始文本，如 python、空字符串或空白。
 }
 
+const TRANSIENT_SAVE_ERROR_CODES = new Set(["EAGAIN", "EBUSY", "EPERM"]);
+const SAVE_RETRY_DELAYS = [100, 300, 800] as const;
+
+function filesystemErrorCode(error: unknown): string | null {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string") {
+      return code.toUpperCase();
+    }
+  }
+  if (error instanceof Error) {
+    const match = /^(EAGAIN|EBUSY|EPERM):/.exec(error.message);
+    return match ? match[1] : null;
+  }
+  return null;
+}
+
+function isTransientSaveError(error: unknown): boolean {
+  const code = filesystemErrorCode(error);
+  return code !== null && TRANSIENT_SAVE_ERROR_CODES.has(code);
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, milliseconds));
+}
+
 /**
  * 识别行首允许有 0～3 个普通空格的围栏行，匹配失败返回 null。
  * \x60 表示反引号；第一个捕获组是围栏标记，第二个是其后的文本。
@@ -154,36 +180,55 @@ export async function updateMarkdownSource(
     throw new Error("无法定位当前 Markdown 文件");
   }
 
-  let replaced = false;
-  const update = (fileContent: string) => {
-    // 同一笔记可能有多个 tab 块：先匹配旧内容，再用原行号选取距离最近的那个。
-    const block = findTabBlock(fileContent, previousSource, expectedLine);
-    if (!block) {
-      return fileContent;
+  const updateOnce = async (): Promise<void> => {
+    // 每次重试都使用新的匹配状态。前一次可能已执行回调但在实际写入时失败，
+    // 不能让旧的 replaced=true 掩盖重试时检测到的真实内容冲突。
+    let replaced = false;
+    const update = (fileContent: string) => {
+      // 同一笔记可能有多个 tab 块：先匹配旧内容，再用原行号选取距离最近的那个。
+      const block = findTabBlock(fileContent, previousSource, expectedLine);
+      if (!block) {
+        return fileContent;
+      }
+      replaced = true;
+      // 删除最后一个标签时用 null 明确表示移除整个块，仍使用相同的旧内容冲突检查。
+      const replacement =
+        nextSource === null
+          ? ""
+          : createTabFence(nextSource, block.marker, block.indent, block.newline);
+      return fileContent.slice(0, block.start) + replacement + fileContent.slice(block.end);
+    };
+
+    if (typeof app.vault.process === "function") {
+      // process 在同一次回调里读改写，可降低与 Obsidian 自动保存并发覆盖的风险。
+      await app.vault.process(file, update);
+    } else {
+      // 兼容没有 vault.process 的旧版本 Obsidian。
+      const current = await app.vault.read(file);
+      const updated = update(current);
+      if (updated !== current) {
+        await app.vault.modify(file, updated);
+      }
     }
-    replaced = true;
-    // 删除最后一个标签时用 null 明确表示移除整个块，仍使用相同的旧内容冲突检查。
-    const replacement =
-      nextSource === null
-        ? ""
-        : createTabFence(nextSource, block.marker, block.indent, block.newline);
-    return fileContent.slice(0, block.start) + replacement + fileContent.slice(block.end);
+
+    if (!replaced) {
+      throw new Error("原标签块已发生变化，请刷新笔记后重试");
+    }
   };
 
-  if (typeof app.vault.process === "function") {
-    // process 在同一次回调里读改写，可降低与 Obsidian 自动保存并发覆盖的风险。
-    await app.vault.process(file, update);
-  } else {
-    // 兼容没有 vault.process 的旧版本 Obsidian。
-    const current = await app.vault.read(file);
-    const updated = update(current);
-    if (updated !== current) {
-      await app.vault.modify(file, updated);
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await updateOnce();
+      return;
+    } catch (error) {
+      const delay = SAVE_RETRY_DELAYS[attempt];
+      if (delay === undefined || !isTransientSaveError(error)) {
+        throw error;
+      }
+      // 坚果云等同步文件系统会在替换/协调文件的极短窗口返回 EPERM 或 EBUSY。
+      // 有限退避让该窗口自然结束；同一编辑会话仍复用外层 pendingSave Promise。
+      await wait(delay);
     }
-  }
-
-  if (!replaced) {
-    throw new Error("原标签块已发生变化，请刷新笔记后重试");
   }
 }
 
