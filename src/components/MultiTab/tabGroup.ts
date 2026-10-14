@@ -26,6 +26,11 @@ interface TabView {
   rendering: boolean;
 }
 
+interface TabDropTarget {
+  view: TabView;
+  after: boolean;
+}
+
 const EMPTY_CODE_BLOCK = "```text\n\n```";
 
 function getGroupInfo(context: MarkdownPostProcessorContext, element: HTMLElement): TabGroupInfo {
@@ -90,8 +95,11 @@ export function renderTabGroup(
   let activeIndex = Math.min(plugin.activeTabs.get(group.id) || 0, tabs.length - 1);
   let editingIndex = -1;
   let changingTabs = false;
+  let draggedView: TabView | null = null;
+  let dropTarget: TabDropTarget | null = null;
   // 新增标签可先等待当前编辑保存；与鼠标移出共享同一次保存，避免并发覆盖。
   let saveCurrentEditor: (() => Promise<boolean>) | null = null;
+  const hasTitleInput = () => !!tabList.querySelector(".code-tab__rename-input");
 
   const activate = (index: number, focus = false, rememberSelection = true) => {
     // 编辑中不允许直接切换标签，否则鼠标点击会先销毁当前编辑器并丢失未保存内容。
@@ -343,6 +351,77 @@ export function renderTabGroup(
     }
   };
 
+  const clearTabDragState = () => {
+    for (const view of views) {
+      view.button.classList.remove("is-dragging", "is-drop-before", "is-drop-after");
+    }
+    dropTarget = null;
+  };
+
+  const moveTab = async (view: TabView, target: TabDropTarget): Promise<boolean> => {
+    const fromIndex = views.indexOf(view);
+    const targetIndex = views.indexOf(target.view);
+    if (changingTabs || editingIndex >= 0 || hasTitleInput() || fromIndex < 0 || targetIndex < 0) {
+      return false;
+    }
+
+    let nextIndex = targetIndex + (target.after ? 1 : 0);
+    if (nextIndex > fromIndex) {
+      nextIndex -= 1;
+    }
+    if (nextIndex === fromIndex) {
+      return true;
+    }
+
+    changingTabs = true;
+    addButton.disabled = true;
+    const previousIndex = activeIndex;
+    const activeView = views[activeIndex];
+    const nextTabs = tabs.slice();
+    const movedTab = nextTabs.splice(fromIndex, 1)[0];
+    nextTabs.splice(nextIndex, 0, movedTab);
+    const nextViews = views.slice();
+    const movedView = nextViews.splice(fromIndex, 1)[0];
+    nextViews.splice(nextIndex, 0, movedView);
+    const nextActiveIndex = nextViews.indexOf(activeView);
+    const nextSource = serializeTabs(nextTabs);
+    try {
+      // 宿主可能在写回后立即重建组件，先记录同一活动标签的新位置。
+      plugin.activeTabs.set(group.id, nextActiveIndex);
+      await updateMarkdownSource(
+        plugin.app,
+        context.sourcePath,
+        group.lineStart,
+        source,
+        nextSource,
+      );
+      tabs = nextTabs;
+      source = nextSource;
+      if (element.isConnected) {
+        views.splice(0, views.length, ...nextViews);
+        for (const current of views) {
+          tabList.insertBefore(current.button, addButton);
+          panels.appendChild(current.panel);
+        }
+        activate(nextActiveIndex);
+        const scrollOptions: ScrollIntoViewOptions = {
+          block: "nearest",
+          inline: "nearest",
+        };
+        view.button.scrollIntoView(scrollOptions);
+      }
+      return true;
+    } catch (error) {
+      plugin.activeTabs.set(group.id, previousIndex);
+      console.error("Code Tab: failed to move tab", error);
+      new Notice(error instanceof Error ? error.message : "标签排序失败", 5000);
+      return false;
+    } finally {
+      changingTabs = false;
+      addButton.disabled = false;
+    }
+  };
+
   const createTabElements = (tab: TabData, index: number) => {
     const tabId = "code-tab-tab-" + groupSuffix + "-" + index;
     const panelId = "code-tab-panel-" + groupSuffix + "-" + index;
@@ -353,6 +432,7 @@ export function renderTabGroup(
     button.type = "button";
     button.id = tabId;
     button.textContent = tab.title;
+    button.draggable = true;
     button.setAttribute("role", "tab");
     button.setAttribute("aria-controls", panelId);
     const tabComponent = component.addChild(new Component());
@@ -378,6 +458,51 @@ export function renderTabGroup(
         next = tabs.length - 1;
       }
       activate(next, true);
+    });
+    tabComponent.registerDomEvent(button, "dragstart", (event) => {
+      if (changingTabs || editingIndex >= 0 || hasTitleInput() || tabs.length < 2) {
+        event.preventDefault();
+        return;
+      }
+      draggedView = view;
+      button.classList.add("is-dragging");
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", tab.title);
+      }
+    });
+    tabComponent.registerDomEvent(button, "dragover", (event) => {
+      if (!draggedView || changingTabs || editingIndex >= 0 || hasTitleInput()) {
+        return;
+      }
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "move";
+      }
+      clearTabDragState();
+      draggedView.button.classList.add("is-dragging");
+      const bounds = button.getBoundingClientRect();
+      const target: TabDropTarget = {
+        view,
+        after: event.clientX >= bounds.left + bounds.width / 2,
+      };
+      dropTarget = target;
+      button.classList.add(target.after ? "is-drop-after" : "is-drop-before");
+    });
+    tabComponent.registerDomEvent(button, "drop", (event) => {
+      if (!draggedView || !dropTarget) {
+        return;
+      }
+      event.preventDefault();
+      const viewToMove = draggedView;
+      const target = dropTarget;
+      draggedView = null;
+      clearTabDragState();
+      void moveTab(viewToMove, target);
+    });
+    tabComponent.registerDomEvent(button, "dragend", () => {
+      draggedView = null;
+      clearTabDragState();
     });
     tabList.insertBefore(button, addButton);
 

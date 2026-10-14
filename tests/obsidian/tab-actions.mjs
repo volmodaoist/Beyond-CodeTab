@@ -27,6 +27,33 @@ const settle = () =>
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
   );
 
+async function waitForFile(expected) {
+  await page.waitForFunction(async (content) => {
+    const file = app.vault.getAbstractFileByPath("Test.md");
+    return (await app.vault.read(file)) === content;
+  }, expected);
+  await settle();
+}
+
+async function dragTab(sourceName, targetName, after) {
+  const source = group.getByRole("tab", {
+    name: sourceName,
+    exact: true,
+  });
+  const target = group.getByRole("tab", {
+    name: targetName,
+    exact: true,
+  });
+  const bounds = await target.boundingBox();
+  assert.ok(bounds, "拖放目标应有可见布局");
+  await source.dragTo(target, {
+    targetPosition: {
+      x: after ? bounds.width - 2 : 2,
+      y: bounds.height / 2,
+    },
+  });
+}
+
 async function reset(mode = "preview", theme = "light") {
   await page.evaluate(
     async ({ initial, mode, theme }) => {
@@ -278,6 +305,41 @@ try {
       console.log("PASS tab rename and delete", label);
     }
   }
+
+  // 拖动标题会同步 DOM、活动页和 Markdown；放到目标左右半区决定插入方向。
+  await reset();
+  await group
+    .getByRole("tab", {
+      name: "中间页",
+      exact: true,
+    })
+    .click();
+  await dragTab("中间页", "首页", false);
+  const middleFirst =
+    "````tab\ntab: 中间页\n保留的 Markdown\n\ntab: 首页\n```python\nprint(1)\n```\n\ntab: 尾页\n```text\nlast\n```\n````";
+  await waitForFile(middleFirst + "\n\n" + other + "\n");
+  assert.deepEqual(await group.getByRole("tab").allTextContents(), ["中间页", "首页", "尾页"]);
+  assert.equal(
+    await group
+      .getByRole("tab", {
+        name: "中间页",
+        exact: true,
+      })
+      .getAttribute("aria-selected"),
+    "true",
+    "排序后继续选中原活动标签",
+  );
+
+  await dragTab("首页", "尾页", true);
+  const homeLast =
+    "````tab\ntab: 中间页\n保留的 Markdown\n\ntab: 尾页\n```text\nlast\n```\n\ntab: 首页\n```python\nprint(1)\n```\n````";
+  await waitForFile(homeLast + "\n\n" + other + "\n");
+  assert.deepEqual(await group.getByRole("tab").allTextContents(), ["中间页", "尾页", "首页"]);
+  reports.push({
+    result: "passed",
+    scenario: "drag-reorder",
+  });
+  console.log("PASS tab drag reorder");
 
   // 回写失败保留标题输入或确认弹窗，不能出现文件未写入、界面却已删除的状态。
   await reset();

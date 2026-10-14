@@ -55,11 +55,36 @@
   font-size: var(--font-ui-medium);
   font-weight: var(--font-medium, 500);
   line-height: 1.35;
-  cursor: pointer;
+  cursor: grab;
   position: relative;
   transition:
     color 120ms ease,
     background-color 120ms ease;
+}
+
+.code-tab__tab.is-dragging {
+  opacity: 0.45;
+  cursor: grabbing;
+}
+
+.code-tab__tab.is-drop-before::before,
+.code-tab__tab.is-drop-after::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: 0.45rem;
+  bottom: 0.45rem;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--code-tab-accent);
+}
+
+.code-tab__tab.is-drop-before::before {
+  inset-inline-start: -0.125rem;
+}
+
+.code-tab__tab.is-drop-after::before {
+  inset-inline-end: -0.125rem;
 }
 
 .code-tab__tab:hover,
@@ -107,6 +132,7 @@
 .code-tab__add {
   min-width: 2.25rem;
   padding-inline: 0.6rem;
+  cursor: pointer;
 }
 
 .code-tab__add .svg-icon {
