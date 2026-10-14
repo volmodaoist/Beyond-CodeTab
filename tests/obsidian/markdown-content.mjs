@@ -211,6 +211,47 @@ try {
   );
   console.log("PASS table growth and surrounding Markdown");
 
+  const listAfterCode = "```c++\nint value = 3;\n```\n\nHello\n\n- ";
+  await show(listAfterCode);
+  await panel.locator("pre").click();
+  await editor.waitFor();
+  await settle();
+  const listAlignment = await editor.evaluate((editor) => {
+    const paragraph = [...editor.querySelectorAll(".cm-line")].find(
+      (line) => line.textContent === "Hello",
+    );
+    const list = editor.querySelector(".cm-line.HyperMD-list-line");
+    const bullet = list.querySelector(".list-bullet");
+    return {
+      paragraphStart: paragraph.getBoundingClientRect().left,
+      markerStart: bullet.getBoundingClientRect().left,
+    };
+  });
+  assert.ok(
+    Math.abs(listAlignment.markerStart - listAlignment.paragraphStart) < 6,
+    `列表圆点应与普通段落左边缘对齐: ${JSON.stringify(listAlignment)}`,
+  );
+  await page.keyboard.press("Escape");
+  await waitForPreview();
+  const previewListAlignment = await panel.evaluate((panel) => {
+    const paragraph = panel.querySelector("p");
+    const item = panel.querySelector("li");
+    return {
+      paragraphStart: paragraph.getBoundingClientRect().left,
+      itemStart: item.getBoundingClientRect().left,
+      fontSize: Number.parseFloat(getComputedStyle(item).fontSize),
+    };
+  });
+  assert.ok(
+    Math.abs(
+      previewListAlignment.itemStart -
+        previewListAlignment.paragraphStart -
+        previewListAlignment.fontSize,
+    ) < 1,
+    `预览列表只应保留一格正文缩进: ${JSON.stringify(previewListAlignment)}`,
+  );
+  console.log("PASS list alignment after code block");
+
   await show("```md\n" + table + "\n```");
   await panel.locator("table").waitFor();
   await panel.locator("th").first().click();

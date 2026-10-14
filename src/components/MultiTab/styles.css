@@ -231,6 +231,16 @@
   margin-bottom: 0 !important;
 }
 
+/* 顶层列表使用一格悬挂缩进：圆点与普通段落起点对齐，正文从圆点右侧开始。
+   Obsidian 默认把缩进放在 li 的 margin 上，不同主题会将这一格放大到接近两格。 */
+.code-tab__panel > ul {
+  padding-inline-start: 1em !important;
+}
+
+.code-tab__panel > ul > li {
+  margin-inline-start: 0 !important;
+}
+
 .code-tab__panel.is-editing {
   /* 字体和留白与预览一致；高度交给正文决定，回车/粘贴后自然向下扩展。 */
   min-height: 0;
@@ -312,9 +322,15 @@
   caret-color: var(--text-accent);
 }
 
-.code-tab__native-editor .code-tab__cm-content > .cm-line {
+.code-tab__native-editor .code-tab__cm-content > .cm-line:not(.HyperMD-list-line) {
   /* 行内代码块原有的左缩进与 cm-content 的 padding 重复，只保留一层。 */
   padding-inline: 0 !important;
+  max-width: none !important;
+}
+
+.code-tab__native-editor .code-tab__cm-content > .cm-line.HyperMD-list-line {
+  /* 宿主用正 padding 配合负 text-indent 形成悬挂圆点；不能像普通行一样清零，
+     否则圆点会越过正文起点。这里只解除 Code Tab 的覆盖，列表层级仍由 Obsidian 管理。 */
   max-width: none !important;
 }
 
