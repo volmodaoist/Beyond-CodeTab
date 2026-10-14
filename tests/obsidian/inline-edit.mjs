@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { launchTestVault } from "./host.mjs";
 
 const code = '```python\nprint("hello tab1")\n```';
-const mixed = '说明\n\n```python\nprint("hello tab2")\n```';
+const mixed = '代码前说明\n\n```python\nprint("hello tab2")\n```\n\n代码后说明';
 const initial = "````tab\ntab: tab1\n" + code + "\n\ntab: tab2\n" + mixed + "\n````\n";
 const host = await launchTestVault(initial);
 const { page, directory, vault } = host;
@@ -320,6 +320,54 @@ try {
     }
   }
 
+  // 自动保存失败后鼠标仍在编辑区外。一次移出只能尝试保存和提示一次，不能让后续
+  // mousemove 反复写文件并堆叠相同 Notice；重新进入编辑区后才允许再次自动保存。
+  await setNoteMarkdown(initial);
+  await page.waitForFunction(() => {
+    const visible = [...document.querySelectorAll(".code-tab")].find((el) => el.checkVisibility());
+    return (
+      visible?.querySelector(".code-tab__panel:not([hidden]) pre code")?.textContent.trim() ===
+      'print("hello tab1")'
+    );
+  });
+  await enterEditor();
+  await page.keyboard.press("Meta+A");
+  await page.keyboard.insertText("conflicting edit");
+  await page.evaluate(() => {
+    window.originalPointerSaveProcess = app.vault.process;
+    window.pointerSaveAttempts = 0;
+    app.vault.process = async () => {
+      window.pointerSaveAttempts += 1;
+      throw new Error("test: pointer save conflict");
+    };
+  });
+  const conflictBounds = await group.locator(".code-tab__panel:not([hidden])").boundingBox();
+  await page.mouse.move(conflictBounds.x + 20, conflictBounds.y + 20);
+  await page.mouse.move(conflictBounds.x + 20, conflictBounds.y + conflictBounds.height + 20);
+  await page
+    .getByText("test: pointer save conflict", {
+      exact: true,
+    })
+    .waitFor();
+  await page.mouse.move(conflictBounds.x + 30, conflictBounds.y + conflictBounds.height + 30);
+  await page.mouse.move(conflictBounds.x + 40, conflictBounds.y + conflictBounds.height + 40);
+  await settleLayout();
+  assert.equal(await page.evaluate(() => window.pointerSaveAttempts), 1);
+  assert.equal(
+    await page
+      .getByText("test: pointer save conflict", {
+        exact: true,
+      })
+      .count(),
+    1,
+  );
+  await page.evaluate(() => {
+    app.vault.process = window.originalPointerSaveProcess;
+  });
+  await page.keyboard.press("Escape");
+  await waitForPreview();
+  assert.equal(await fileContent(), initial);
+
   // 网页与 VS Code 的剪贴板通常同时含 HTML 和纯文本。纯代码标签必须忽略富文本行节点，
   // 否则宿主的 Markdown 转换可能把每行变成段落，并丢失前导空格。
   await setNoteMarkdown(initial);
@@ -365,10 +413,33 @@ try {
       name: "tab2",
     })
     .click();
-  await enterEditor();
+  // 混合内容不能只有代码块可点击；代码前后的普通 Markdown 也应直接进入同一个编辑器。
+  await group
+    .getByText("代码前说明", {
+      exact: true,
+    })
+    .waitFor();
+  await group
+    .getByText("代码后说明", {
+      exact: true,
+    })
+    .click();
+  await group.locator(".code-tab__native-editor .cm-content").waitFor();
+  await settleLayout();
   assert.equal(await editorContent(), mixed);
-  await page.keyboard.press("Escape");
+  assert.equal(
+    await page.evaluate(() => window.codeTabTestEmbed.editor.cm.state.selection.main.head),
+    mixed.indexOf("代码后说明"),
+    "首次点击代码块后的 Markdown 时，光标应落到被点击内容附近",
+  );
+  await page.keyboard.insertText("更新：");
+  await page.keyboard.press("Meta+Enter");
   await waitForPreview();
+  assert.equal(
+    await fileContent(),
+    initial.replace(mixed, mixed.replace("代码后说明", "更新：代码后说明")),
+    "直接点击代码块后的 Markdown 后应能立即输入并保存",
+  );
   await group
     .getByRole("tab", {
       name: "tab1",

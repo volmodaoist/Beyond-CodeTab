@@ -23,6 +23,7 @@ export interface TabEditorOptions {
   source: string;
   highlighting: CodeHighlighting | null;
   click: MouseEvent;
+  initialSelection: number | null;
   addButton: HTMLElement;
   onSave: () => void;
   onCancel: () => void;
@@ -43,6 +44,7 @@ export class TabEditor extends Component {
   private disposed = false;
   private pointerX: number;
   private pointerY: number;
+  private pointerOutsideSaveArea = false;
 
   constructor(private readonly options: TabEditorOptions) {
     super();
@@ -90,7 +92,7 @@ export class TabEditor extends Component {
       }
       // 用户可能在初始化的这一帧已点入类型框，不能再把焦点抢回正文。
       if (this.options.panel.ownerDocument.activeElement !== this.typeInput?.input) {
-        this.focus();
+        this.focusAtInitialClick();
       }
       this.options.panel.classList.remove("is-restoring");
       this.options.panel.style.removeProperty("--code-tab-restore-height");
@@ -126,6 +128,39 @@ export class TabEditor extends Component {
     } else {
       this.fallback?.focus();
     }
+  }
+
+  /** 预览被替换后，尽量把第一次点击转换成新编辑器中的光标位置。 */
+  private focusAtInitialClick() {
+    const editor = this.native?.editor;
+    const view = editor?.cm;
+    if (editor && view) {
+      const coordinates: {
+        x: number;
+        y: number;
+      } = {
+        x: this.pointerX,
+        y: this.pointerY,
+      };
+      let position = this.options.initialSelection;
+      if (position !== null && this.content.kind === "markdown" && this.content.body) {
+        position -= this.content.body.from;
+      }
+      position =
+        position === null
+          ? view.posAtCoords(coordinates, false)
+          : Math.max(0, Math.min(position, view.state.doc.length));
+      if (position !== null) {
+        const transaction: TransactionSpec = {
+          selection: EditorSelection.cursor(position),
+          scrollIntoView: true,
+        };
+        view.dispatch(transaction);
+      }
+      editor.focus();
+      return;
+    }
+    this.fallback?.focus();
   }
 
   private createNativeEditor() {
@@ -298,7 +333,15 @@ export class TabEditor extends Component {
       this.pointerY = event.clientY;
       const path = event.composedPath();
       // 布局变化不算主动移出；移向 + 时由新增动作按顺序保存当前编辑。
-      if (moved && !path.includes(panel) && !path.includes(this.options.addButton)) {
+      const outsideSaveArea = !path.includes(panel) && !path.includes(this.options.addButton);
+      if (!outsideSaveArea) {
+        // 只有重新进入编辑区后再次移出，才开始下一次自动保存尝试。保存失败时鼠标
+        // 往往仍在面板外，不能让每一个 mousemove 都重复写文件并创建一条 Notice。
+        this.pointerOutsideSaveArea = false;
+        return;
+      }
+      if (moved && !this.pointerOutsideSaveArea) {
+        this.pointerOutsideSaveArea = true;
         this.options.onSave();
       }
     });

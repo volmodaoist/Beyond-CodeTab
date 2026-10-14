@@ -15,6 +15,7 @@ import { TabEditor } from "./tabEditor";
 import type { TabEditorOptions } from "./tabEditor";
 import { attachTabActions } from "./tabActions";
 import type { TabActionsOptions } from "./tabActions";
+import { findPreviewSourcePosition, previewTargetStartsEditing } from "./previewInteraction";
 
 /** 一个标签对应一组 DOM 和资源。删除时一起释放，不用同步维护多个索引 Map。 */
 interface TabView {
@@ -182,6 +183,10 @@ export function renderTabGroup(
     );
     panel.addClass("is-restoring");
     const originalContent = tabs[index].content;
+    const clickTarget = click.target as Element | null;
+    const initialSelection = clickTarget
+      ? findPreviewSourcePosition(panel, clickTarget, originalContent)
+      : null;
     const preview = view.preview;
     if (preview) {
       view.component.removeChild(preview);
@@ -271,6 +276,7 @@ export function renderTabGroup(
       source: originalContent,
       highlighting: view.highlighting,
       click,
+      initialSelection,
       addButton,
       onSave: save,
       onCancel: cancel,
@@ -534,6 +540,14 @@ export function renderTabGroup(
     };
     attachTabActions(actions);
     renderPanel(index);
+    tabComponent.registerDomEvent(panel, "mousedown", (event) => {
+      const target = event.target as Element | null;
+      if (editingIndex < 0 && target && previewTargetStartsEditing(target)) {
+        // 实时预览外层也是 CodeMirror。先截断 mousedown，避免宿主把整个 tab 围栏选中
+        // 或重建处理器，随后 click 才能稳定地交给当前 Code Tab。
+        event.stopPropagation();
+      }
+    });
     tabComponent.registerDomEvent(panel, "click", (event) => {
       if (editingIndex >= 0) {
         return;
@@ -544,18 +558,12 @@ export function renderTabGroup(
       if (!target) {
         return;
       }
-      // 图片、笔记和 Excalidraw 等嵌入保留自己的点击/双击行为，不把画布替换成链接源码。
-      // Excalidraw 渲染完成后会替换宿主的 internal-embed 外壳，需要识别它自己的预览节点。
-      if (target.closest(".internal-embed, .excalidraw-svg, .excalidraw-embedded-img")) {
+      if (!previewTargetStartsEditing(target)) {
         return;
       }
-      const codeButton = target.closest("pre button");
-      if (codeButton) {
-        event.preventDefault();
-        event.stopPropagation();
-      } else if (target.closest("a, button, input, textarea, select")) {
-        return;
-      }
+      // startEditing 会同步替换预览 DOM；不能再让同一次 click 冒泡到外层编辑器。
+      event.preventDefault();
+      event.stopPropagation();
       startEditing(views.indexOf(view), event);
     });
   };
