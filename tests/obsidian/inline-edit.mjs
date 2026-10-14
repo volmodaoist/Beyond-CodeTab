@@ -183,6 +183,28 @@ function sameSyntax(before, after) {
   }
 }
 
+async function syntaxSnapshot(locator) {
+  return locator.evaluate((element) => {
+    const syntax = [];
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const style = getComputedStyle(node.parentElement);
+      for (const character of node.textContent) {
+        if (/\s/u.test(character)) {
+          continue;
+        }
+        syntax.push({
+          character,
+          color: style.color,
+          weight: style.fontWeight,
+          style: style.fontStyle,
+        });
+      }
+    }
+    return syntax;
+  });
+}
+
 try {
   // 同时覆盖阅读视图和实时预览。后一种情况下，插件编辑器还嵌套在笔记的 CodeMirror 中。
   for (const mode of ["preview", "source"]) {
@@ -413,6 +435,14 @@ try {
       name: "tab2",
     })
     .click();
+  const mixedPreviewSyntax = await syntaxSnapshot(
+    group
+      .getByTestId("code-tab-panel")
+      .filter({
+        visible: true,
+      })
+      .locator("pre code"),
+  );
   // 混合内容不能只有代码块可点击；代码前后的普通 Markdown 也应直接进入同一个编辑器。
   await group
     .getByText("代码前说明", {
@@ -427,6 +457,18 @@ try {
   await group.locator(".code-tab__native-editor .cm-content").waitFor();
   await settleLayout();
   assert.equal(await editorContent(), mixed);
+  const mixedEditorSyntax = await syntaxSnapshot(
+    group
+      .locator(".code-tab__native-editor")
+      .locator(
+        ".cm-line.HyperMD-codeblock:not(.HyperMD-codeblock-begin):not(.HyperMD-codeblock-end)",
+      ),
+  );
+  assert.deepEqual(
+    mixedEditorSyntax,
+    mixedPreviewSyntax,
+    "混合 Markdown 的代码高亮不应在编辑时变色",
+  );
   assert.equal(
     await page.evaluate(() => window.codeTabTestEmbed.editor.cm.state.selection.main.head),
     mixed.indexOf("代码后说明"),

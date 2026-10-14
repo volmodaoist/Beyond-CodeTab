@@ -241,6 +241,14 @@
   margin-inline-start: 0 !important;
 }
 
+.code-tab__panel > p:has(+ ul) {
+  margin-block-end: 0 !important;
+}
+
+.code-tab__panel > p + ul {
+  margin-block-start: 0 !important;
+}
+
 .code-tab__panel.is-editing {
   /* 字体和留白与预览一致；高度交给正文决定，回车/粘贴后自然向下扩展。 */
   min-height: 0;

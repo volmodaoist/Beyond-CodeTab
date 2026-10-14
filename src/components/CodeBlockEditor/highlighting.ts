@@ -6,8 +6,14 @@ import type * as Prism from "prismjs";
 import { findCodeBlockBody } from "./fences";
 
 export interface CodeHighlighting {
-  language: string;
+  language: string | null;
   extension: Extension;
+}
+
+interface CodeRange {
+  from: number;
+  to: number;
+  language: string;
 }
 
 interface TokenizationEnvironment extends Prism.Environment {
@@ -25,48 +31,16 @@ interface TokenizationEnvironment extends Prism.Environment {
 export function codeHighlighting(prism: typeof Prism, language: string): CodeHighlighting {
   const highlight = (source: string): DecorationSet => {
     const body = findCodeBlockBody(source);
-    const grammar = prism.languages[language];
-    if (!body || !grammar) {
+    if (!body) {
       return Decoration.none;
     }
-
-    const environment: TokenizationEnvironment = {
-      code: source.slice(body.from, body.to),
-      grammar,
+    const ranges: Range<Decoration>[] = [];
+    const code: CodeRange = {
+      from: body.from,
+      to: body.to,
       language,
     };
-    // 与 Prism.highlight 保持同样的分词钩子顺序，兼容嵌套语言的语法预处理。
-    prism.hooks.run("before-tokenize", environment);
-    environment.tokens = prism.tokenize(environment.code, environment.grammar);
-    prism.hooks.run("after-tokenize", environment);
-
-    const ranges: Range<Decoration>[] = [];
-    const visit = (token: Prism.TokenStream, from: number): number => {
-      if (typeof token === "string") {
-        return from + token.length;
-      }
-      if (Array.isArray(token)) {
-        let offset = from;
-        for (const child of token) {
-          offset = visit(child, offset);
-        }
-        return offset;
-      }
-
-      // 嵌套 token 也保留自己的 class，例如模板字符串中的插值表达式。
-      const to = visit(token.content, from);
-      if (to > from) {
-        const aliases = typeof token.alias === "string" ? [token.alias] : token.alias || [];
-        const classes = ["code-tab__syntax", "token", token.type, ...aliases];
-        type MarkOptions = Parameters<typeof Decoration.mark>[0];
-        const options: MarkOptions = {
-          class: classes.join(" "),
-        };
-        ranges.push(Decoration.mark(options).range(from, to));
-      }
-      return to;
-    };
-    visit(environment.tokens, body.from);
+    appendPrismRanges(prism, source, code, ranges);
     return Decoration.set(ranges, true);
   };
 
@@ -90,4 +64,118 @@ export function codeHighlighting(prism: typeof Prism, language: string): CodeHig
   };
 
   return result;
+}
+
+/** 混合 Markdown 中的每个围栏独立按其语言使用 Prism 着色，正文仍由宿主渲染。 */
+export function mixedCodeHighlighting(prism: typeof Prism): CodeHighlighting {
+  const highlight = (source: string): DecorationSet => {
+    const ranges: Range<Decoration>[] = [];
+    for (const code of findFencedCodeRanges(source)) {
+      appendPrismRanges(prism, source, code, ranges);
+    }
+    return Decoration.set(ranges, true);
+  };
+  type HighlightFieldDefinition = Parameters<typeof StateField.define<DecorationSet>>[0];
+  const definition: HighlightFieldDefinition = {
+    create(state) {
+      return highlight(state.doc.toString());
+    },
+    update(value, transaction) {
+      return transaction.docChanged ? highlight(transaction.newDoc.toString()) : value;
+    },
+    provide(field) {
+      return EditorView.decorations.from(field);
+    },
+  };
+  const result: CodeHighlighting = {
+    language: null,
+    extension: Prec.highest(StateField.define(definition)),
+  };
+  return result;
+}
+
+function appendPrismRanges(
+  prism: typeof Prism,
+  source: string,
+  code: CodeRange,
+  ranges: Range<Decoration>[],
+): void {
+  const grammar = prism.languages[code.language];
+  if (!grammar) {
+    return;
+  }
+  const environment: TokenizationEnvironment = {
+    code: source.slice(code.from, code.to),
+    grammar,
+    language: code.language,
+  };
+  prism.hooks.run("before-tokenize", environment);
+  environment.tokens = prism.tokenize(environment.code, environment.grammar);
+  prism.hooks.run("after-tokenize", environment);
+
+  const visit = (token: Prism.TokenStream, from: number): number => {
+    if (typeof token === "string") {
+      return from + token.length;
+    }
+    if (Array.isArray(token)) {
+      let offset = from;
+      for (const child of token) {
+        offset = visit(child, offset);
+      }
+      return offset;
+    }
+    const to = visit(token.content, from);
+    if (to > from) {
+      const aliases = typeof token.alias === "string" ? [token.alias] : token.alias || [];
+      const classes = ["code-tab__syntax", "token", token.type, ...aliases];
+      type MarkOptions = Parameters<typeof Decoration.mark>[0];
+      const options: MarkOptions = {
+        class: classes.join(" "),
+      };
+      ranges.push(Decoration.mark(options).range(from, to));
+    }
+    return to;
+  };
+  visit(environment.tokens, code.from);
+}
+
+function findFencedCodeRanges(source: string): CodeRange[] {
+  const lines = source.split("\n");
+  const offsets: number[] = [];
+  let offset = 0;
+  for (const line of lines) {
+    offsets.push(offset);
+    offset += line.length + 1;
+  }
+  const ranges: CodeRange[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const opening = lines[index].match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (!opening || (opening[1][0] === "`" && opening[2].includes("`"))) {
+      continue;
+    }
+    const marker = opening[1][0];
+    const markerLength = opening[1].length;
+    const rawLanguage = opening[2].trim().split(/\s/u)[0].toLowerCase();
+    const aliases: Record<string, string> = {
+      "c++": "cpp",
+      "c#": "csharp",
+    };
+    const language = aliases[rawLanguage] || rawLanguage;
+    for (let closingIndex = index + 1; closingIndex < lines.length; closingIndex += 1) {
+      const closing = lines[closingIndex].match(/^ {0,3}(`{3,}|~{3,})[ \t]*$/);
+      if (!closing || closing[1][0] !== marker || closing[1].length < markerLength) {
+        continue;
+      }
+      const from = offsets[index] + lines[index].length + 1;
+      const range: CodeRange = {
+        from,
+        to: Math.max(from, offsets[closingIndex] - 1),
+        language,
+      };
+      ranges.push(range);
+      index = closingIndex;
+      break;
+    }
+  }
+  return ranges;
 }

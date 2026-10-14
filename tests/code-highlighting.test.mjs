@@ -10,7 +10,7 @@ const compiled = await build({
     contents: `
       export { EditorState } from "@codemirror/state";
       export { EditorView } from "@codemirror/view";
-      export { codeHighlighting } from "./src/components/CodeBlockEditor/highlighting";
+      export { codeHighlighting, mixedCodeHighlighting } from "./src/components/CodeBlockEditor/highlighting";
     `,
     resolveDir: fileURLToPath(new URL("../", import.meta.url)),
     loader: "ts",
@@ -20,7 +20,7 @@ const compiled = await build({
   format: "esm",
   write: false,
 });
-const { EditorState, EditorView, codeHighlighting } = await import(
+const { EditorState, EditorView, codeHighlighting, mixedCodeHighlighting } = await import(
   "data:text/javascript;base64," + Buffer.from(compiled.outputFiles[0].text).toString("base64")
 );
 
@@ -107,4 +107,29 @@ test("未知语言和混合 Markdown 不套用单代码块着色", () => {
     assert.deepEqual(tokens(state), []);
     assert.equal(state.doc.toString(), source);
   }
+});
+
+test("混合 Markdown 的多个围栏按各自语言着色且不触碰正文", () => {
+  const source = [
+    "说明段落",
+    "```python",
+    'value = "中文"',
+    "```",
+    "中间正文",
+    "```unknown",
+    "plain = 42",
+    "```",
+  ].join("\n");
+  const state = EditorState.create({
+    doc: source,
+    extensions: mixedCodeHighlighting(Prism).extension,
+  });
+  const result = tokens(state);
+  assert.ok(result.some((token) => token.text === '"中文"' && token.classes.includes("string")));
+  assert.ok(result.every((token) => token.text !== "说明段落" && token.text !== "中间正文"));
+  assert.ok(
+    result.every((token) => token.text !== "42"),
+    "未知语言不添加 Prism 装饰",
+  );
+  assert.equal(state.doc.toString(), source);
 });

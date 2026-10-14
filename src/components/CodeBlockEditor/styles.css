@@ -40,13 +40,30 @@
 }
 
 /* 正文只使用与预览相同的 Prism token 着色，普通字符不沿用另一套语法颜色。 */
-.code-tab__native-editor.has-prism-highlighting .code-tab__cm-content {
+.code-tab__native-editor.has-prism-highlighting:not(.has-mixed-prism-highlighting)
+  .code-tab__cm-content {
   color: var(--code-normal);
 }
 
-.code-tab__native-editor.has-prism-highlighting
+.code-tab__native-editor.has-prism-highlighting:not(.has-mixed-prism-highlighting)
   .code-tab__cm-content
   > .cm-line
+  span:not(.code-tab__syntax) {
+  color: inherit !important;
+  font-weight: inherit !important;
+  font-style: inherit !important;
+}
+
+/* 混合 Markdown 只统一围栏正文的颜色；段落、列表和围栏标记继续使用宿主样式。 */
+.code-tab__native-editor.has-mixed-prism-highlighting
+  .code-tab__cm-content
+  > .cm-line.HyperMD-codeblock:not(.HyperMD-codeblock-begin):not(.HyperMD-codeblock-end) {
+  color: var(--code-normal);
+}
+
+.code-tab__native-editor.has-mixed-prism-highlighting
+  .code-tab__cm-content
+  > .cm-line.HyperMD-codeblock:not(.HyperMD-codeblock-begin):not(.HyperMD-codeblock-end)
   span:not(.code-tab__syntax) {
   color: inherit !important;
   font-weight: inherit !important;

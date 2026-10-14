@@ -211,14 +211,14 @@ try {
   );
   console.log("PASS table growth and surrounding Markdown");
 
-  const listAfterCode = "```c++\nint value = 3;\n```\n\nHello\n\n- ";
+  const listAfterCode = "```c++\nint value = 3;\n```\n内容\n- 此处补充内容\n- 其它内容";
   await show(listAfterCode);
   await panel.locator("pre").click();
   await editor.waitFor();
   await settle();
   const listAlignment = await editor.evaluate((editor) => {
     const paragraph = [...editor.querySelectorAll(".cm-line")].find(
-      (line) => line.textContent === "Hello",
+      (line) => line.textContent === "内容",
     );
     const list = editor.querySelector(".cm-line.HyperMD-list-line");
     const bullet = list.querySelector(".list-bullet");
@@ -235,9 +235,12 @@ try {
   await waitForPreview();
   const previewListAlignment = await panel.evaluate((panel) => {
     const paragraph = panel.querySelector("p");
+    const list = panel.querySelector("ul");
     const item = panel.querySelector("li");
     return {
       paragraphStart: paragraph.getBoundingClientRect().left,
+      paragraphBottom: paragraph.getBoundingClientRect().bottom,
+      listTop: list.getBoundingClientRect().top,
       itemStart: item.getBoundingClientRect().left,
       fontSize: Number.parseFloat(getComputedStyle(item).fontSize),
     };
@@ -249,6 +252,10 @@ try {
         previewListAlignment.fontSize,
     ) < 1,
     `预览列表只应保留一格正文缩进: ${JSON.stringify(previewListAlignment)}`,
+  );
+  assert.ok(
+    Math.abs(previewListAlignment.listTop - previewListAlignment.paragraphBottom) < 1,
+    `相邻段落与列表不应额外叠加垂直间距: ${JSON.stringify(previewListAlignment)}`,
   );
   console.log("PASS list alignment after code block");
 

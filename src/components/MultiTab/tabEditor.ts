@@ -216,8 +216,8 @@ export class TabEditor extends Component {
 
     if (this.content.kind === "code" && this.content.body) {
       extensions.push(...codeBlockEditorExtensions());
-      extensions.push(this.highlightingSlot.of(this.highlighting?.extension ?? []));
     }
+    extensions.push(this.highlightingSlot.of(this.highlighting?.extension ?? []));
     const transaction: TransactionSpec = {
       effects: StateEffect.appendConfig.of(extensions),
       selection:
@@ -255,6 +255,10 @@ export class TabEditor extends Component {
 
   private setHighlightingClass() {
     this.host.classList.toggle("has-prism-highlighting", !!this.highlighting);
+    this.host.classList.toggle(
+      "has-mixed-prism-highlighting",
+      !!this.highlighting && this.highlighting.language === null,
+    );
     if (this.highlighting?.language) {
       this.host.classList.add("language-" + this.highlighting.language);
     }

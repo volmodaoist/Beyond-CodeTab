@@ -2,7 +2,7 @@ import type * as Prism from "prismjs";
 import { loadPrism, MarkdownRenderer } from "obsidian";
 import type { App, Component } from "obsidian";
 import { normalizePreviewFenceLanguages } from "../../markdown";
-import { codeHighlighting } from "../CodeBlockEditor";
+import { codeHighlighting, mixedCodeHighlighting } from "../CodeBlockEditor";
 import type { CodeHighlighting } from "../CodeBlockEditor";
 import type CodeTabPlugin from "../../main";
 import { readTabContent } from "./tabContent";
@@ -46,7 +46,8 @@ export async function renderTabPreview(
   const previewSource = normalizePreviewFenceLanguages(content.editorSource);
   await MarkdownRenderer.render(app, previewSource, panel, sourcePath, component);
   if (content.kind !== "code") {
-    return null;
+    const prism: typeof Prism = await loadPrism();
+    return mixedCodeHighlighting(prism);
   }
 
   // 普通代码提前准备相同的着色，点击时无需异步等待；图表等处理器仍由宿主生成预览。
