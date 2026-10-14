@@ -11,6 +11,7 @@ const compiled = await build({
       export { EditorState } from "@codemirror/state";
       export { EditorView } from "@codemirror/view";
       export { codeHighlighting, mixedCodeHighlighting } from "./src/components/CodeBlockEditor/highlighting";
+      export { findFencedCodeRanges } from "./src/components/CodeBlockEditor/fencedCodeRanges";
     `,
     resolveDir: fileURLToPath(new URL("../", import.meta.url)),
     loader: "ts",
@@ -20,9 +21,10 @@ const compiled = await build({
   format: "esm",
   write: false,
 });
-const { EditorState, EditorView, codeHighlighting, mixedCodeHighlighting } = await import(
-  "data:text/javascript;base64," + Buffer.from(compiled.outputFiles[0].text).toString("base64")
-);
+const { EditorState, EditorView, codeHighlighting, findFencedCodeRanges, mixedCodeHighlighting } =
+  await import(
+    "data:text/javascript;base64," + Buffer.from(compiled.outputFiles[0].text).toString("base64")
+  );
 
 function tokens(state) {
   const result = [];
@@ -132,4 +134,14 @@ test("混合 Markdown 的多个围栏按各自语言着色且不触碰正文", (
     "未知语言不添加 Prism 装饰",
   );
   assert.equal(state.doc.toString(), source);
+});
+
+test("围栏扫描独立处理别名、波浪围栏和未闭合围栏", () => {
+  const source = ["~~~C++ extra", "int value = 1;", "~~~~", "```python", "print('unclosed')"].join(
+    "\n",
+  );
+  const result = findFencedCodeRanges(source);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].language, "cpp");
+  assert.equal(source.slice(result[0].from, result[0].to), "int value = 1;");
 });

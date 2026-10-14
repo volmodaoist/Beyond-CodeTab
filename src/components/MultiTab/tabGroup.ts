@@ -9,28 +9,16 @@ import {
   serializeTabs,
   updateMarkdownSource,
 } from "../../markdown";
-import type { CodeHighlighting } from "../CodeBlockEditor";
 import { renderTabPreview } from "./tabPreview";
 import { TabEditor } from "./tabEditor";
 import type { TabEditorOptions } from "./tabEditor";
 import { attachTabActions } from "./tabActions";
 import type { TabActionsOptions } from "./tabActions";
 import { findPreviewSourcePosition, previewTargetStartsEditing } from "./previewInteraction";
-
-/** 一个标签对应一组 DOM 和资源。删除时一起释放，不用同步维护多个索引 Map。 */
-interface TabView {
-  button: HTMLButtonElement;
-  panel: HTMLDivElement;
-  component: Component;
-  preview: Component | null;
-  highlighting: CodeHighlighting | null;
-  rendering: boolean;
-}
-
-interface TabDropTarget {
-  view: TabView;
-  after: boolean;
-}
+import { createTabDragController } from "./tabDragController";
+import type { TabMoveTarget } from "./tabDragController";
+import { createTabView, removeTabView, reorderTabViews, syncTabViews } from "./tabView";
+import type { TabView } from "./tabView";
 
 const EMPTY_CODE_BLOCK = "```text\n\n```";
 
@@ -96,8 +84,6 @@ export function renderTabGroup(
   let activeIndex = Math.min(plugin.activeTabs.get(group.id) || 0, tabs.length - 1);
   let editingIndex = -1;
   let changingTabs = false;
-  let draggedView: TabView | null = null;
-  let dropTarget: TabDropTarget | null = null;
   // 新增标签可先等待当前编辑保存；与鼠标移出共享同一次保存，避免并发覆盖。
   let saveCurrentEditor: (() => Promise<boolean>) | null = null;
   const hasTitleInput = () => !!tabList.querySelector(".code-tab__rename-input");
@@ -113,19 +99,7 @@ export function renderTabGroup(
       plugin.activeTabs.set(group.id, index);
     }
 
-    views.forEach((view, buttonIndex) => {
-      const button = view.button;
-      const active = buttonIndex === index;
-      // 删除后序号可能前移，ARIA 关联和键盘导航始终跟随当前顺序。
-      button.id = "code-tab-tab-" + groupSuffix + "-" + buttonIndex;
-      view.panel.id = "code-tab-panel-" + groupSuffix + "-" + buttonIndex;
-      button.setAttribute("aria-controls", view.panel.id);
-      view.panel.setAttribute("aria-labelledby", button.id);
-      button.classList.toggle("is-active", active);
-      button.setAttribute("aria-selected", String(active));
-      button.setAttribute("tabindex", active ? "0" : "-1");
-      view.panel.hidden = !active;
-    });
+    syncTabViews(views, index, groupSuffix);
 
     if (focus) {
       views[index].button.focus();
@@ -333,9 +307,7 @@ export function renderTabGroup(
       source = nextSource ?? "";
       if (title === null) {
         const removed = views.splice(index, 1)[0];
-        component.removeChild(removed.component);
-        removed.button.remove();
-        removed.panel.remove();
+        removeTabView(component, removed);
       } else {
         views[index].button.textContent = title;
       }
@@ -357,14 +329,7 @@ export function renderTabGroup(
     }
   };
 
-  const clearTabDragState = () => {
-    for (const view of views) {
-      view.button.classList.remove("is-dragging", "is-drop-before", "is-drop-after");
-    }
-    dropTarget = null;
-  };
-
-  const moveTab = async (view: TabView, target: TabDropTarget): Promise<boolean> => {
+  const moveTab = async (view: TabView, target: TabMoveTarget): Promise<boolean> => {
     const fromIndex = views.indexOf(view);
     const targetIndex = views.indexOf(target.view);
     if (changingTabs || editingIndex >= 0 || hasTitleInput() || fromIndex < 0 || targetIndex < 0) {
@@ -405,10 +370,7 @@ export function renderTabGroup(
       source = nextSource;
       if (element.isConnected) {
         views.splice(0, views.length, ...nextViews);
-        for (const current of views) {
-          tabList.insertBefore(current.button, addButton);
-          panels.appendChild(current.panel);
-        }
+        reorderTabViews(views, tabList, addButton, panels);
         activate(nextActiveIndex);
         const scrollOptions: ScrollIntoViewOptions = {
           block: "nearest",
@@ -428,20 +390,27 @@ export function renderTabGroup(
     }
   };
 
-  const createTabElements = (tab: TabData, index: number) => {
-    const tabId = "code-tab-tab-" + groupSuffix + "-" + index;
-    const panelId = "code-tab-panel-" + groupSuffix + "-" + index;
+  const dragController = createTabDragController({
+    views,
+    canStart: () => !changingTabs && editingIndex < 0 && !hasTitleInput() && tabs.length >= 2,
+    getLabel: (view) => tabs[views.indexOf(view)]?.title || "",
+    onMove: moveTab,
+  });
 
-    const button = document.createElement("button");
-    button.className = "code-tab__tab";
-    button.setAttribute("data-testid", "code-tab-tab");
-    button.type = "button";
-    button.id = tabId;
-    button.textContent = tab.title;
-    button.draggable = true;
-    button.setAttribute("role", "tab");
-    button.setAttribute("aria-controls", panelId);
-    const tabComponent = component.addChild(new Component());
+  const createTabElements = (tab: TabData, index: number) => {
+    const view = createTabView({
+      owner: component,
+      tabList,
+      addButton,
+      panels,
+      groupSuffix,
+      index,
+      title: tab.title,
+    });
+    const button = view.button;
+    const panel = view.panel;
+    const tabComponent = view.component;
+    views.push(view);
     tabComponent.registerDomEvent(button, "click", () => activate(views.indexOf(view)));
     tabComponent.registerDomEvent(button, "keydown", (event) => {
       // 使用 WAI-ARIA tabs 常见键位，鼠标之外也能完整切换标签。
@@ -465,70 +434,7 @@ export function renderTabGroup(
       }
       activate(next, true);
     });
-    tabComponent.registerDomEvent(button, "dragstart", (event) => {
-      if (changingTabs || editingIndex >= 0 || hasTitleInput() || tabs.length < 2) {
-        event.preventDefault();
-        return;
-      }
-      draggedView = view;
-      button.classList.add("is-dragging");
-      if (event.dataTransfer) {
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", tab.title);
-      }
-    });
-    tabComponent.registerDomEvent(button, "dragover", (event) => {
-      if (!draggedView || changingTabs || editingIndex >= 0 || hasTitleInput()) {
-        return;
-      }
-      event.preventDefault();
-      if (event.dataTransfer) {
-        event.dataTransfer.dropEffect = "move";
-      }
-      clearTabDragState();
-      draggedView.button.classList.add("is-dragging");
-      const bounds = button.getBoundingClientRect();
-      const target: TabDropTarget = {
-        view,
-        after: event.clientX >= bounds.left + bounds.width / 2,
-      };
-      dropTarget = target;
-      button.classList.add(target.after ? "is-drop-after" : "is-drop-before");
-    });
-    tabComponent.registerDomEvent(button, "drop", (event) => {
-      if (!draggedView || !dropTarget) {
-        return;
-      }
-      event.preventDefault();
-      const viewToMove = draggedView;
-      const target = dropTarget;
-      draggedView = null;
-      clearTabDragState();
-      void moveTab(viewToMove, target);
-    });
-    tabComponent.registerDomEvent(button, "dragend", () => {
-      draggedView = null;
-      clearTabDragState();
-    });
-    tabList.insertBefore(button, addButton);
-
-    const panel = document.createElement("div");
-    panel.className = "code-tab__panel markdown-rendered";
-    panel.setAttribute("data-testid", "code-tab-panel");
-    panel.id = panelId;
-    panel.setAttribute("role", "tabpanel");
-    panel.setAttribute("aria-labelledby", tabId);
-    panel.hidden = true;
-    panels.appendChild(panel);
-    const view: TabView = {
-      button,
-      panel,
-      component: tabComponent,
-      preview: null,
-      highlighting: null,
-      rendering: false,
-    };
-    views.push(view);
+    dragController.attach(tabComponent, view);
     const actions: TabActionsOptions = {
       app: plugin.app,
       component: tabComponent,

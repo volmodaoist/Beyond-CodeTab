@@ -4,16 +4,12 @@ import { Decoration, EditorView } from "@codemirror/view";
 import type { DecorationSet } from "@codemirror/view";
 import type * as Prism from "prismjs";
 import { findCodeBlockBody } from "./fences";
+import { findFencedCodeRanges } from "./fencedCodeRanges";
+import type { CodeRange } from "./fencedCodeRanges";
 
 export interface CodeHighlighting {
   language: string | null;
   extension: Extension;
-}
-
-interface CodeRange {
-  from: number;
-  to: number;
-  language: string;
 }
 
 interface TokenizationEnvironment extends Prism.Environment {
@@ -137,45 +133,4 @@ function appendPrismRanges(
     return to;
   };
   visit(environment.tokens, code.from);
-}
-
-function findFencedCodeRanges(source: string): CodeRange[] {
-  const lines = source.split("\n");
-  const offsets: number[] = [];
-  let offset = 0;
-  for (const line of lines) {
-    offsets.push(offset);
-    offset += line.length + 1;
-  }
-  const ranges: CodeRange[] = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    const opening = lines[index].match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
-    if (!opening || (opening[1][0] === "`" && opening[2].includes("`"))) {
-      continue;
-    }
-    const marker = opening[1][0];
-    const markerLength = opening[1].length;
-    const rawLanguage = opening[2].trim().split(/\s/u)[0].toLowerCase();
-    const aliases: Record<string, string> = {
-      "c++": "cpp",
-      "c#": "csharp",
-    };
-    const language = aliases[rawLanguage] || rawLanguage;
-    for (let closingIndex = index + 1; closingIndex < lines.length; closingIndex += 1) {
-      const closing = lines[closingIndex].match(/^ {0,3}(`{3,}|~{3,})[ \t]*$/);
-      if (!closing || closing[1][0] !== marker || closing[1].length < markerLength) {
-        continue;
-      }
-      const from = offsets[index] + lines[index].length + 1;
-      const range: CodeRange = {
-        from,
-        to: Math.max(from, offsets[closingIndex] - 1),
-        language,
-      };
-      ranges.push(range);
-      index = closingIndex;
-      break;
-    }
-  }
-  return ranges;
 }

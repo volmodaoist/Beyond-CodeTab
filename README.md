@@ -250,16 +250,20 @@ obsidian-code-tab/
 │   │   ├── MultiTab/             # 标签组件：标题、预览、Markdown 编辑和保存
 │   │   │   ├── index.ts          # 对外入口
 │   │   │   ├── tabGroup.ts       # 标签切换、新增及保存/取消协调
+│   │   │   ├── tabView.ts        # 标签 DOM、生命周期与 ARIA 状态同步
+│   │   │   ├── tabDragController.ts # 标签拖拽瞬时状态与落点判断
 │   │   │   ├── tabActions.ts     # 标题输入、右键菜单和删除确认
 │   │   │   ├── tabContent.ts     # 内容分类与 Markdown/代码格式转换
 │   │   │   ├── tabPreview.ts     # 宿主预览与语法加载
 │   │   │   ├── tabEditor.ts      # 临时 Markdown 编辑会话
 │   │   │   ├── renderTypeInput.ts # 渲染类型输入
 │   │   │   ├── types.ts          # 标签数据与原生 embed 类型
-│   │   │   └── styles.css        # 标签、面板、Markdown 编辑器样式
+│   │   │   ├── styles.css        # 标签外壳与预览面板样式
+│   │   │   └── editorStyles.css  # 原生编辑器与降级输入框样式
 │   │   └── CodeBlockEditor/      # 单代码块编辑能力
 │   │       ├── index.ts          # 对外入口
 │   │       ├── fences.ts         # 正文范围、围栏折叠与编辑边界
+│   │       ├── fencedCodeRanges.ts # 混合 Markdown 围栏区间扫描
 │   │       ├── highlighting.ts   # Prism 着色装饰
 │   │       ├── language.ts       # 类型名校验与围栏语言替换
 │   │       └── styles.css        # 代码预览和编辑的共享样式
@@ -289,7 +293,7 @@ obsidian-code-tab/
 
 `MultiTab` 管标签栏、Markdown 预览、临时编辑会话和安全保存；`CodeBlockEditor` 管单代码块的围栏保护、Prism 着色和代码样式。表格与画布走 Markdown 能力，编辑会话留在 `MultiTab`，不会被混进纯代码组件。
 
-这里按目录划分职责，不强制每个目录再包一层 class。`index.ts` 只导出实际使用的入口，内部函数直接互相调用；每个标签的 DOM、预览和监听器由一个 `TabView` 关联，删除时一起释放。组件 CSS 保留 `.code-tab` 前缀，通过根样式汇总，最终仍只产出一个 `dist/styles.css`。
+这里按目录划分职责，不强制每个目录再包一层 class。`index.ts` 只导出实际使用的入口，内部函数直接互相调用；每个标签的 DOM、预览和监听器由一个 `TabView` 关联，删除时一起释放。`tabGroup.ts` 保留需要原子协调的编辑和保存流程，纯视图同步与拖拽状态分别交给小模块。组件 CSS 保留 `.code-tab` 前缀，通过根样式汇总，最终仍只产出一个 `dist/styles.css`。
 
 ### 核心术语与数据流
 

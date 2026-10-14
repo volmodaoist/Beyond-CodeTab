@@ -4,7 +4,7 @@
 
 ## Git Tag 现状
 
-- 当前 `manifest.json` 版本为 `2.2.1`，尚无对应 tag，两个现有 tag 名称指向的是上游仓库，只作为历史里程碑使用。
+- 当前 `manifest.json` 版本为 `2.2.1`。轻量 tag `2.2.1` 固定指向提交 `86d6385`，作为交互与布局修复完成后的稳定基线；后续维护性重构位于该 tag 之后，不移动基线。
 
   - `1.0`：轻量 tag，指向早期 1.0 更新节点
     - 建立 Code Tab 插件的基础结构
@@ -13,6 +13,9 @@
     - 支持新增、删除、重命名、拖拽和内容编辑。
     - 每个标签常驻一个原生 Markdown embed。
     - 原生 embed 带来整页 padding、多余控件和较重的布局结构。
+  - `2.2.1`：轻量 tag，指向当前稳定功能基线
+    - 包含混合 Markdown 编辑、高亮、列表布局、拖拽和 Excalidraw Frame Deck。
+    - 作为后续模块拆分前的可回退节点。
 
 ## 2.0.1
 
@@ -36,3 +39,10 @@
 - 改进表格原地编辑，避免进入编辑时发生布局跳动。
 - 支持可选的 Excalidraw Frame Deck 循环翻页。
 - 按 `MultiTab`、`CodeBlockEditor` 和内容适配层拆分组件职责。
+
+## 2.2.1 之后（未发布）
+
+- `tabGroup.ts` 继续持有标签数据、编辑会话和安全写回事务；静态 DOM/ARIA 同步移入 `tabView.ts`，HTML5 拖拽瞬时状态移入 `tabDragController.ts`。
+- 混合 Markdown 围栏扫描移入 `fencedCodeRanges.ts`，Prism 高亮模块只负责分词和 CodeMirror decoration。
+- 原生编辑器与降级输入框样式移入 `editorStyles.css`，标签外壳和预览布局继续保留在 `styles.css`。
+- 这次拆分不增加框架、基类或新的持久状态，对外 Markdown 格式和交互行为保持不变。

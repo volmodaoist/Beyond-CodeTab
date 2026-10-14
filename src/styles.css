@@ -1,4 +1,5 @@
 /* 构建时合并组件样式，Obsidian 最终仍只加载 dist/styles.css。 */
 @import "./components/MultiTab/styles.css";
+@import "./components/MultiTab/editorStyles.css";
 @import "./components/MultiTab/excalidrawFrameDeck.css";
 @import "./components/CodeBlockEditor/styles.css";

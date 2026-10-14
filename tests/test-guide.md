@@ -54,7 +54,7 @@ CODE_TAB_EXCALIDRAW_PLUGIN='/你的仓库/.obsidian/plugins/obsidian-excalidraw-
 | [obsidian/table-transition.mjs](obsidian/table-transition.mjs) | 单击、快速双击及正常间隔双击的逐帧尺寸，方向键移到表格前后时的空行和文字输入 |
 | [obsidian/tab-actions.mjs](obsidian/tab-actions.mjs) | 原地重命名、确认删除、取消、最后一页、删除后的索引、冲突及重复确认 |
 | [fixtures/table.md](fixtures/table.md) | 中文长文本与行内代码混合的表格，用于重现点击后的上下位移 |
-| 本目录中的 `*.test.mjs` | 无需启动 Obsidian 的解析、数据回写和编辑器逻辑测试 |
+| 本目录中的 `*.test.mjs` | 无需启动 Obsidian 的解析、数据回写、围栏扫描和编辑器逻辑测试 |
 
 五组界面测试分别启动一个临时 Obsidian 进程，各组按用例切换阅读视图、实时预览、明暗主题和窗口宽度。这就是可见模式下会看到多种用例反复切换的原因。测试使用临时笔记，日常仓库中的内容不参与运行。
 

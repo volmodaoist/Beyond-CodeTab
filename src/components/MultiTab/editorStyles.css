@@ -1,0 +1,151 @@
+/* 编辑会话的尺寸和宿主 CodeMirror 覆盖集中在此文件；标签外壳样式见 styles.css。 */
+.code-tab__panel.is-editing {
+  /* 字体和留白与预览一致；高度交给正文决定，回车/粘贴后自然向下扩展。 */
+  min-height: 0;
+}
+
+.code-tab__panel.is-restoring {
+  /* 只在预览/编辑器交接时保持高度，防止 DOM 暂时为空导致整页滚动位置被裁短。 */
+  min-height: var(--code-tab-restore-height);
+}
+
+.code-tab__native-editor {
+  --code-tab-editor-background: transparent;
+  box-sizing: border-box;
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  border-radius: var(--code-tab-radius);
+  background: var(--code-tab-editor-background);
+}
+
+/* 只清理当前 embed 的外壳；正文里的笔记、画布和表格单元格保留自己的布局。 */
+.code-tab__native-editor.markdown-embed {
+  border: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: var(--code-tab-editor-background);
+}
+
+.code-tab__native-editor > .markdown-embed-content,
+.code-tab__native-editor > .markdown-embed-content > .markdown-source-view,
+.code-tab__native-editor .code-tab__cm-root,
+.code-tab__native-editor .code-tab__cm-scroller {
+  box-sizing: border-box;
+  width: 100%;
+  height: auto !important;
+  max-height: none !important;
+  min-width: 0;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.code-tab__native-editor .code-tab__cm-scroller {
+  /* 由笔记整页滚动；正文增加行时编辑器自然增高。 */
+  overflow: visible !important;
+  scrollbar-gutter: auto !important;
+}
+
+.code-tab__native-editor > .markdown-embed-title,
+.code-tab__native-editor > .markdown-embed-link,
+.code-tab__native-editor .code-tab__cm-sizer > .inline-title,
+.code-tab__native-editor .code-tab__cm-sizer > .metadata-container {
+  display: none !important;
+}
+
+.code-tab__native-editor .code-tab__cm-sizer {
+  /* 原生整页编辑器带内联留白，只对已标记的外层 sizer 清零。 */
+  min-height: 0 !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.code-tab__native-editor .code-tab__cm-container {
+  padding: 0 !important;
+}
+
+.code-tab__native-editor .code-tab__cm-content {
+  min-height: 0 !important;
+  max-width: none !important;
+  padding: 0 !important;
+  font: inherit;
+  caret-color: var(--text-accent);
+}
+
+.code-tab__native-editor .code-tab__cm-content > .cm-line:not(.HyperMD-list-line) {
+  /* 行内代码块原有的左缩进与 cm-content 的 padding 重复，只保留一层。 */
+  padding-inline: 0 !important;
+  max-width: none !important;
+}
+
+.code-tab__native-editor .code-tab__cm-content > .cm-line.HyperMD-list-line {
+  /* 宿主用正 padding 配合负 text-indent 形成悬挂圆点；不能像普通行一样清零，
+     否则圆点会越过正文起点。这里只解除 Code Tab 的覆盖，列表层级仍由 Obsidian 管理。 */
+  max-width: none !important;
+}
+
+.code-tab__native-editor .code-tab__cm-scroller > .cm-gutters {
+  display: none !important;
+}
+
+.code-tab__native-editor .code-tab__cm-root.cm-focused {
+  outline: none !important;
+}
+
+/* 表格的拖拽控件使用面板原有的留白，避免 widget 再添加一圈 16px 的空间。 */
+.code-tab__native-editor.is-markdown-content .code-tab__cm-content > .cm-table-widget {
+  /* 用负 margin 抵消控件留白，表格正文仍与预览对齐；保留窄窗口下的横向滚动。 */
+  margin: -16px !important;
+  padding: 16px !important;
+}
+
+/* 宿主在表格前后放置空光标行。正文没有对应空行时，它们只是定位占位，不应撑高表格。
+   这里依据文档边界，而非 cm-focused：初始化会先聚焦外层编辑器、再聚焦单元格，
+   按焦点切换高度会闪出两条 24px 空行。键盘离开表格后插入的真实空行仍保留行盒。 */
+.code-tab__native-editor.is-markdown-content
+  .code-tab__cm-root[data-leading-blank-line="false"]
+  .code-tab__cm-content
+  > .cm-line:first-child:has(> br:only-child):has(+ .cm-table-widget),
+.code-tab__native-editor.is-markdown-content
+  .code-tab__cm-root[data-trailing-blank-line="false"]
+  .code-tab__cm-content
+  > .cm-table-widget
+  + .cm-line:last-child:has(> br:only-child) {
+  min-height: 0;
+  line-height: 0;
+}
+
+.code-tab__fallback-editor {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  resize: none;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--code-tab-radius);
+  outline: 0;
+  background: var(--code-tab-editor-background);
+  color: var(--text-normal);
+  caret-color: var(--text-accent);
+  font-family: var(--font-monospace);
+  font-size: var(--code-size);
+  line-height: 1.7;
+  tab-size: 4;
+}
+
+.code-tab.is-editing .code-tab__tab {
+  cursor: default;
+}
