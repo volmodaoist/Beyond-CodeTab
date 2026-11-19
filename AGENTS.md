@@ -44,6 +44,7 @@ return { marker: marks[0], length: marks.length, suffix: match[2] };
 
 ## Git 与演进文档维护
 
+- 每次提交（包括 amend）前，将最终提交说明写入临时文件，运行 `python3 .github/workflows/check-commit.py <提交说明文件>`，再用检查后的文件提交；提交后核对实际写入的说明，确保没有被本机钩子追加署名或邮箱。
 - commit message 只描述本次变更，不写测试数量、构建通过或人工验收结果。
 - 跨多个提交的问题背景、方案淘汰和架构取舍更新在 `docs/evolution-history.md` 或对应专题文档中。
 - 发布稳定版本时应创建与 `manifest.json` 一致的 tag，并在发布说明中引用演进记录的对应版本。
