@@ -2,6 +2,8 @@ import { Component, Notice, setIcon } from "obsidian";
 import type { MarkdownPostProcessorContext, MarkdownRenderChild } from "obsidian";
 import type CodeTabPlugin from "../../main";
 import type { TabData, TabGroupInfo } from "./types";
+import { applyTabOperations, CodeTabError, CodeTabErrorCode } from "../../openapi";
+import type { CodeTabHandle, CodeTabSnapshot, CodeTabUpdate } from "../../openapi";
 import {
   normalizeNewlines,
   parseTabs,
@@ -40,33 +42,60 @@ export interface TabGroupHost {
   onEditingChange?: (editing: boolean) => void;
 }
 
-export async function renderTabGroup(
+export interface TabGroupController extends CodeTabHandle {
+  readonly ready: Promise<void>;
+}
+
+export function renderTabGroup(
   plugin: CodeTabPlugin,
   component: MarkdownRenderChild,
   element: HTMLElement,
   context: MarkdownPostProcessorContext,
   initialSource: string,
   host?: TabGroupHost,
-) {
+): TabGroupController {
   // source 不含最外层 ```tab fence，只包含各标签的声明和正文。
-  let source = normalizeNewlines(initialSource);
+  let source = host ? initialSource : normalizeNewlines(initialSource);
+  let sourcePath = context.sourcePath;
+  let readOnly = !!host?.readOnly || (!!host && !host.onChange);
+  let disposed = false;
+  let revision = 0;
+  let writes = 0;
+  let updating = false;
+  let renderFailed = false;
+  let interactions = 0;
+  const listeners = new Set<(snapshot: CodeTabSnapshot) => void>();
   let tabs = parseTabs(source);
-  const group: TabGroupInfo = host
-    ? {
-        id: host.id,
-        lineStart: 0,
-      }
-    : getGroupInfo(context, element);
-  const persistSource = async (expected: string, next: string | null): Promise<void> => {
-    if (host?.onChange) {
-      await host.onChange(expected, next);
-      return;
-    }
-    await updateMarkdownSource(plugin.app, context.sourcePath, group.lineStart, expected, next);
-  };
+  let group: TabGroupInfo;
   if (host) {
-    component.register(() => plugin.activeTabs.delete(group.id));
+    const hostedGroup: TabGroupInfo = {
+      id: host.id,
+      lineStart: 0,
+    };
+    group = hostedGroup;
+  } else {
+    group = getGroupInfo(context, element);
   }
+  const persistSource = async (expected: string, next: string | null): Promise<void> => {
+    assertAlive();
+    writes += 1;
+    notify();
+    try {
+      assertAlive();
+      if (host) {
+        if (!host.onChange || readOnly) {
+          throw new CodeTabError(CodeTabErrorCode.ReadOnly, "标签组为只读");
+        }
+        await host.onChange(expected, next);
+      } else {
+        await updateMarkdownSource(plugin.app, sourcePath, group.lineStart, expected, next);
+      }
+      assertAlive();
+    } finally {
+      writes -= 1;
+      notify();
+    }
+  };
   const initialPreviews: Promise<void>[] = [];
   let initializing = true;
 
@@ -75,22 +104,19 @@ export async function renderTabGroup(
   // 测试标识描述组件用途；同页多个标签组由父容器限定范围，不占用全局 DOM id。
   element.setAttribute("data-testid", "code-tab-group");
 
-  if (tabs.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "code-tab__empty";
-    empty.textContent = "未找到标签。请使用 tab: 标题 声明标签。";
-    element.appendChild(empty);
-    return;
-  }
+  const empty = element.ownerDocument.createElement("div");
+  empty.className = "code-tab__empty";
+  empty.textContent = "未找到标签。请使用 tab: 标题 声明标签。";
+  element.appendChild(empty);
 
   const groupSuffix = safeId(group.id);
-  const tabList = document.createElement("div");
+  const tabList = element.ownerDocument.createElement("div");
   tabList.className = "code-tab__list";
   tabList.setAttribute("data-testid", "code-tab-list");
   tabList.setAttribute("role", "tablist");
   element.appendChild(tabList);
 
-  const addButton = document.createElement("button");
+  const addButton = element.ownerDocument.createElement("button");
   addButton.className = "code-tab__add";
   addButton.type = "button";
   addButton.setAttribute("data-testid", "code-tab-add");
@@ -98,11 +124,11 @@ export async function renderTabGroup(
   setIcon(addButton, "plus");
   addButton.setAttribute("aria-label", "新增标签");
   addButton.title = "新增标签";
-  if (!host?.readOnly) {
+  if (!readOnly) {
     tabList.appendChild(addButton);
   }
 
-  const panels = document.createElement("div");
+  const panels = element.ownerDocument.createElement("div");
   panels.className = "code-tab__panels";
   element.appendChild(panels);
 
@@ -113,9 +139,16 @@ export async function renderTabGroup(
   let changingTabs = false;
   // 新增标签可先等待当前编辑保存；与鼠标移出共享同一次保存，避免并发覆盖。
   let saveCurrentEditor: (() => Promise<boolean>) | null = null;
+  let cancelCurrentEditor: (() => Promise<void>) | null = null;
+  let editorSession: TabEditor | null = null;
+  let lastEditError: unknown;
   const hasTitleInput = () => !!tabList.querySelector(".code-tab__rename-input");
+  component.register(dispose);
 
   const activate = (index: number, focus = false, rememberSelection = true) => {
+    if (disposed || index < 0 || index >= views.length) {
+      return;
+    }
     // 编辑中不允许直接切换标签，否则鼠标点击会先销毁当前编辑器并丢失未保存内容。
     if (editingIndex >= 0 && editingIndex !== index) {
       return;
@@ -127,47 +160,65 @@ export async function renderTabGroup(
     }
 
     syncTabViews(views, index, groupSuffix);
+    notify();
 
-    if (focus) {
+    if (focus && !disposed) {
       views[index].button.focus();
     }
   };
 
   const renderPanel = async (index: number) => {
     const view = views[index];
+    if (disposed || !view) {
+      return;
+    }
     const panel = view.panel;
     view.rendering = true;
-    view.highlighting = null;
-    panel.empty();
-    // 每次预览都有独立生命周期。切换到编辑或重新渲染时，旧嵌入的监听器与子组件一并释放。
-    const previousPreview = view.preview;
-    if (previousPreview) {
-      view.component.removeChild(previousPreview);
+    notify();
+    if (disposed) {
+      return;
     }
-    const preview = view.component.addChild(new Component());
-    view.preview = preview;
+    view.highlighting = null;
+    let preview: Component | null = null;
     try {
+      panel.empty();
+      // 每次预览都有独立生命周期。切换到编辑或重新渲染时，旧嵌入的监听器与子组件一并释放。
+      const previousPreview = view.preview;
+      if (previousPreview) {
+        view.component.removeChild(previousPreview);
+      }
+      preview = view.component.addChild(new Component());
+      view.preview = preview;
       const highlighting = await renderTabPreview(
         plugin,
         preview,
         panel,
-        context.sourcePath,
+        sourcePath,
         tabs[index].content,
         group.id + ":" + index,
+        () => !disposed && view.preview === preview,
       );
-      if (highlighting) {
+      if (!disposed && view.preview === preview && highlighting) {
         view.highlighting = highlighting;
       }
+    } catch (error) {
+      if (!disposed && (!preview || view.preview === preview)) {
+        renderFailed = true;
+      }
+      throw error;
     } finally {
-      // 预览完成后才解锁高度，避免卸载编辑器到异步渲染完成之间先塌陷、再撑开。
-      panel.classList.remove("is-editing", "is-restoring");
-      panel.style.removeProperty("--code-tab-restore-height");
-      view.rendering = false;
+      if (!disposed && (!preview || view.preview === preview)) {
+        // 预览完成后才解锁高度，避免卸载编辑器到异步渲染完成之间先塌陷、再撑开。
+        panel.classList.remove("is-editing", "is-restoring");
+        panel.style.removeProperty("--code-tab-restore-height");
+        view.rendering = false;
+        notify();
+      }
     }
   };
 
   const startEditing = (index: number, click: MouseEvent) => {
-    if (host?.readOnly) {
+    if (disposed || readOnly || index < 0 || index >= views.length) {
       return;
     }
     // 一个标签组同时只编辑一个页面。编辑器负责输入，标签组统一负责写回和状态切换。
@@ -176,7 +227,10 @@ export async function renderTabGroup(
     }
     activate(index);
     editingIndex = index;
-    host?.onEditingChange?.(true);
+    notifyEditing(true);
+    if (disposed) {
+      return;
+    }
     element.addClass("is-editing");
     const view = views[index];
     const panel = view.panel;
@@ -202,7 +256,10 @@ export async function renderTabGroup(
     let saving = false;
     let pendingSave: Promise<boolean> | null = null;
 
-    const leaveEditor = async () => {
+    const restoreEditor = async () => {
+      if (disposed) {
+        return;
+      }
       // 仅在切回异步预览期间保持当前高度，编辑过程中仍按内容自然增高或收缩。
       panel.style.setProperty(
         "--code-tab-restore-height",
@@ -215,11 +272,21 @@ export async function renderTabGroup(
           await renderPanel(index);
         }
       } finally {
-        editingIndex = -1;
-        host?.onEditingChange?.(false);
-        saveCurrentEditor = null;
-        element.removeClass("is-editing");
+        if (!disposed) {
+          editingIndex = -1;
+          saveCurrentEditor = null;
+          cancelCurrentEditor = null;
+          editorSession = null;
+          element.removeClass("is-editing");
+          notifyEditing(false);
+        }
       }
+    };
+
+    let pendingLeave: Promise<void> | null = null;
+    const leaveEditor = (): Promise<void> => {
+      pendingLeave ??= restoreEditor();
+      return pendingLeave;
     };
 
     const cancel = async () => {
@@ -230,10 +297,11 @@ export async function renderTabGroup(
     };
 
     const persistEdit = async (): Promise<boolean> => {
-      if (editingIndex !== index || saving) {
+      if (disposed || editingIndex !== index || saving) {
         return false;
       }
       saving = true;
+      let restoring = false;
       try {
         const nextContent = editor.getValue().replace(/^\n+|\n+$/g, "");
         if (nextContent !== originalContent) {
@@ -245,14 +313,24 @@ export async function renderTabGroup(
             };
             return nextTab;
           });
-          const nextSource = serializeTabs(nextTabs);
+          const nextSource = serializeSource(nextTabs);
           await persistSource(source, nextSource);
+          assertAlive();
           tabs = nextTabs;
           source = nextSource;
+          revision += 1;
+          notify();
         }
+        restoring = true;
         await leaveEditor();
         return true;
       } catch (error) {
+        if (disposed) {
+          return false;
+        }
+        lastEditError = restoring
+          ? new CodeTabError(CodeTabErrorCode.RenderFailed, "草稿已接受，预览恢复未完成", error)
+          : error;
         console.error("Code Tab: failed to save tab content", error);
         new Notice(error instanceof Error ? error.message : "标签内容保存失败", 5000);
         saving = false;
@@ -272,7 +350,7 @@ export async function renderTabGroup(
     const options: TabEditorOptions = {
       app: plugin.app,
       panel,
-      sourcePath: context.sourcePath,
+      sourcePath,
       source: originalContent,
       highlighting: view.highlighting,
       click,
@@ -280,14 +358,17 @@ export async function renderTabGroup(
       addButton,
       onSave: save,
       onCancel: cancel,
+      completion: plugin.completion,
     };
     const editor = view.component.addChild(new TabEditor(options));
     saveCurrentEditor = save;
+    cancelCurrentEditor = cancel;
+    editorSession = editor;
   };
 
   /** title 为 null 表示删除；其余情况只替换标题，正文保持原样。 */
   const changeTab = async (index: number, title: string | null): Promise<boolean> => {
-    if (changingTabs || index < 0) {
+    if (disposed || readOnly || changingTabs || index < 0 || index >= tabs.length) {
       return false;
     }
     changingTabs = true;
@@ -315,7 +396,7 @@ export async function renderTabGroup(
           nextIndex = Math.min(index, nextTabs.length - 1);
         }
       }
-      const nextSource = nextTabs.length ? serializeTabs(nextTabs) : null;
+      const nextSource = nextTabs.length ? serializeSource(nextTabs) : null;
       // 先记住选择，以便宿主因文件变化重建组件后仍选中同一个剩余标签。
       if (nextIndex < 0) {
         plugin.activeTabs.delete(group.id);
@@ -323,8 +404,11 @@ export async function renderTabGroup(
         plugin.activeTabs.set(group.id, nextIndex);
       }
       await persistSource(source, nextSource);
+      assertAlive();
       tabs = nextTabs;
       source = nextSource ?? "";
+      revision += 1;
+      notify();
       if (title === null) {
         const removed = views.splice(index, 1)[0];
         removeTabView(component, removed);
@@ -332,27 +416,45 @@ export async function renderTabGroup(
         views[index].button.textContent = title;
       }
       if (!tabs.length) {
-        element.remove();
+        if (host) {
+          syncEmptyState();
+        } else {
+          element.remove();
+        }
       } else if (element.isConnected) {
         // 标题失焦保存期间，用户可能已点了另一页；重命名不能把选择切回去。
         activate(title === null ? nextIndex : activeIndex);
       }
       return true;
     } catch (error) {
+      if (disposed) {
+        return false;
+      }
       plugin.activeTabs.set(group.id, previousIndex);
       console.error("Code Tab: failed to change tab", error);
       new Notice(error instanceof Error ? error.message : "标签修改失败", 5000);
       return false;
     } finally {
       changingTabs = false;
-      addButton.disabled = false;
+      if (!disposed) {
+        addButton.disabled = false;
+        notify();
+      }
     }
   };
 
   const moveTab = async (view: TabView, target: TabMoveTarget): Promise<boolean> => {
     const fromIndex = views.indexOf(view);
     const targetIndex = views.indexOf(target.view);
-    if (changingTabs || editingIndex >= 0 || hasTitleInput() || fromIndex < 0 || targetIndex < 0) {
+    if (
+      disposed ||
+      readOnly ||
+      changingTabs ||
+      editingIndex >= 0 ||
+      hasTitleInput() ||
+      fromIndex < 0 ||
+      targetIndex < 0
+    ) {
       return false;
     }
 
@@ -375,13 +477,16 @@ export async function renderTabGroup(
     const movedView = nextViews.splice(fromIndex, 1)[0];
     nextViews.splice(nextIndex, 0, movedView);
     const nextActiveIndex = nextViews.indexOf(activeView);
-    const nextSource = serializeTabs(nextTabs);
+    const nextSource = serializeSource(nextTabs);
     try {
       // 宿主可能在写回后立即重建组件，先记录同一活动标签的新位置。
       plugin.activeTabs.set(group.id, nextActiveIndex);
       await persistSource(source, nextSource);
+      assertAlive();
       tabs = nextTabs;
       source = nextSource;
+      revision += 1;
+      notify();
       if (element.isConnected) {
         views.splice(0, views.length, ...nextViews);
         reorderTabViews(views, tabList, addButton, panels);
@@ -394,35 +499,50 @@ export async function renderTabGroup(
       }
       return true;
     } catch (error) {
+      if (disposed) {
+        return false;
+      }
       plugin.activeTabs.set(group.id, previousIndex);
       console.error("Code Tab: failed to move tab", error);
       new Notice(error instanceof Error ? error.message : "标签排序失败", 5000);
       return false;
     } finally {
       changingTabs = false;
-      addButton.disabled = false;
+      if (!disposed) {
+        addButton.disabled = false;
+        notify();
+      }
     }
   };
 
-  const dragController = createTabDragController({
+  const dragOptions: Parameters<typeof createTabDragController>[0] = {
     views,
-    canStart: () => !changingTabs && editingIndex < 0 && !hasTitleInput() && tabs.length >= 2,
+    canStart: () =>
+      !disposed &&
+      !readOnly &&
+      !updating &&
+      !changingTabs &&
+      editingIndex < 0 &&
+      !hasTitleInput() &&
+      tabs.length >= 2,
     getLabel: (view) => tabs[views.indexOf(view)]?.title || "",
     onMove: moveTab,
-  });
+  };
+  const dragController = createTabDragController(dragOptions);
 
   const createTabElements = (tab: TabData, index: number) => {
-    const view = createTabView({
+    const viewOptions: Parameters<typeof createTabView>[0] = {
       owner: component,
       tabList,
-      addButton: host?.readOnly ? null : addButton,
+      addButton: readOnly ? null : addButton,
       panels,
       groupSuffix,
       index,
       title: tab.title,
-    });
+    };
+    const view = createTabView(viewOptions);
     const button = view.button;
-    if (host?.readOnly) {
+    if (readOnly) {
       button.draggable = false;
     }
     const panel = view.panel;
@@ -451,22 +571,22 @@ export async function renderTabGroup(
       }
       activate(next, true);
     });
-    if (!host?.readOnly) {
-      dragController.attach(tabComponent, view);
-    }
+    dragController.attach(tabComponent, view);
     const actions: TabActionsOptions = {
       app: plugin.app,
       component: tabComponent,
       button,
-      canStart: () => !changingTabs && editingIndex < 0,
+      canStart: () => !disposed && !readOnly && !updating && !changingTabs && editingIndex < 0,
+      onInteractionChange: (active) => {
+        interactions += active ? 1 : -1;
+        notify();
+      },
       isLastTab: () => tabs.length === 1,
       onRename: (title) => changeTab(views.indexOf(view), title),
       onDelete: () => changeTab(views.indexOf(view), null),
     };
-    if (!host?.readOnly) {
-      attachTabActions(actions);
-    }
-    if (host && !host.readOnly) {
+    attachTabActions(actions);
+    if (host && !readOnly) {
       panel.setAttribute("data-codeblock-interactive", "true");
     }
     if (host) {
@@ -480,14 +600,14 @@ export async function renderTabGroup(
     }
     tabComponent.registerDomEvent(panel, "mousedown", (event) => {
       const target = event.target as Element | null;
-      if (editingIndex < 0 && target && previewTargetStartsEditing(target)) {
+      if (!readOnly && editingIndex < 0 && target && previewTargetStartsEditing(target)) {
         // 实时预览外层也是 CodeMirror。先截断 mousedown，避免宿主把整个 tab 围栏选中
         // 或重建处理器，随后 click 才能稳定地交给当前 Code Tab。
         event.stopPropagation();
       }
     });
     tabComponent.registerDomEvent(panel, "click", (event) => {
-      if (editingIndex >= 0) {
+      if (disposed || readOnly || editingIndex >= 0) {
         return;
       }
       // Obsidian 会给代码块附加复制/源码按钮。点击源码按钮时也进入编辑，
@@ -504,10 +624,11 @@ export async function renderTabGroup(
       event.stopPropagation();
       startEditing(views.indexOf(view), event);
     });
+    return rendered;
   };
 
   component.registerDomEvent(addButton, "click", async () => {
-    if (changingTabs) {
+    if (disposed || readOnly || updating || changingTabs) {
       return;
     }
     changingTabs = true;
@@ -528,12 +649,15 @@ export async function renderTabGroup(
       };
       const index = tabs.length;
       // 只在原 source 后追加，保留原标签的格式；仍使用带旧内容检查的安全回写。
-      const nextSource = source + "\n\n" + serializeTabs([tab]);
+      const nextSource = adaptNewlines(source + "\n\n" + serializeTabs([tab]));
       // 宿主可能因文件更新重建组件，先记录选择，让重建后的组件也显示新标签。
       plugin.activeTabs.set(group.id, index);
       await persistSource(source, nextSource);
+      assertAlive();
       tabs.push(tab);
       source = nextSource;
+      revision += 1;
+      notify();
       if (element.isConnected) {
         createTabElements(tab, index);
         activate(index, true);
@@ -544,20 +668,376 @@ export async function renderTabGroup(
         views[index].button.scrollIntoView(scrollOptions);
       }
     } catch (error) {
+      if (disposed) {
+        return false;
+      }
       plugin.activeTabs.set(group.id, previousIndex);
       console.error("Code Tab: failed to add tab", error);
       new Notice(error instanceof Error ? error.message : "新增标签失败", 5000);
     } finally {
       changingTabs = false;
-      addButton.disabled = false;
+      if (!disposed) {
+        addButton.disabled = false;
+        notify();
+      }
     }
   });
 
+  function assertAlive(): void {
+    if (disposed) {
+      throw new CodeTabError(CodeTabErrorCode.Disposed, "标签组已释放");
+    }
+  }
+
+  function assertIdle(): void {
+    assertAlive();
+    if (
+      initializing ||
+      updating ||
+      changingTabs ||
+      writes ||
+      interactions > 0 ||
+      editingIndex >= 0 ||
+      hasTitleInput() ||
+      views.some((view) => view.rendering)
+    ) {
+      throw new CodeTabError(CodeTabErrorCode.Busy, "标签组正在编辑、保存或渲染，请稍后重试");
+    }
+  }
+
+  function getSnapshot(): CodeTabSnapshot {
+    assertAlive();
+    const data = tabs.map((tab) => {
+      const copy: TabData = {
+        title: tab.title,
+        content: tab.content,
+      };
+      return Object.freeze(copy);
+    });
+    const snapshot: CodeTabSnapshot = {
+      source,
+      revision,
+      tabs: Object.freeze(data),
+      activeIndex: tabs.length ? activeIndex : null,
+      readOnly,
+      editing: editingIndex >= 0,
+      saving: writes > 0,
+      rendering: initializing || updating || views.some((view) => view.rendering),
+    };
+    return Object.freeze(snapshot);
+  }
+
+  function notify(): void {
+    if (disposed || !listeners.size) {
+      return;
+    }
+    const snapshot = getSnapshot();
+    for (const listener of listeners) {
+      try {
+        listener(snapshot);
+      } catch (error) {
+        console.error("Code Tab: state listener failed", error);
+      }
+    }
+  }
+
+  function notifyEditing(editing: boolean): void {
+    try {
+      host?.onEditingChange?.(editing);
+    } catch (error) {
+      console.error("Code Tab: editing listener failed", error);
+    }
+    notify();
+  }
+
+  function adaptNewlines(value: string): string {
+    const normalized = normalizeNewlines(value);
+    return host && source.includes("\r\n") ? normalized.replace(/\n/g, "\r\n") : normalized;
+  }
+
+  function serializeSource(value: readonly TabData[]): string {
+    return adaptNewlines(serializeTabs([...value]));
+  }
+
+  function syncEmptyState(): void {
+    empty.hidden = tabs.length > 0;
+    tabList.hidden = !tabs.length;
+    panels.hidden = !tabs.length;
+    if (readOnly) {
+      addButton.remove();
+    } else if (addButton.parentElement !== tabList) {
+      tabList.appendChild(addButton);
+    }
+    for (const view of views) {
+      view.button.draggable = !readOnly;
+      if (host && !readOnly) {
+        view.panel.setAttribute("data-codeblock-interactive", "true");
+      } else {
+        view.panel.removeAttribute("data-codeblock-interactive");
+      }
+    }
+  }
+
+  async function syncContents(
+    nextSource: string,
+    path: string,
+    nextReadOnly: boolean,
+    selected?: number,
+  ): Promise<void> {
+    assertAlive();
+    const focused = element.ownerDocument.activeElement;
+    const hadTabFocus = views.some((view) => view.button === focused);
+    const previous = tabs;
+    const activeTab = previous[activeIndex];
+    const pathChanged = sourcePath !== path;
+    const nextTabs = parseTabs(nextSource);
+    if (source !== nextSource) {
+      revision += 1;
+    }
+    source = nextSource;
+    sourcePath = path;
+    readOnly = nextReadOnly;
+    tabs = nextTabs;
+    let nextIndex = Math.min(activeIndex, tabs.length - 1);
+    if (selected !== undefined) {
+      nextIndex = selected;
+    } else if (activeTab && nextTabs[nextIndex]?.title !== activeTab.title) {
+      const matching = nextTabs.findIndex(
+        (tab) => tab.title === activeTab.title && tab.content === activeTab.content,
+      );
+      if (matching >= 0) {
+        nextIndex = matching;
+      }
+    }
+    while (views.length > tabs.length) {
+      const view = views.pop();
+      if (view) {
+        removeTabView(component, view);
+      }
+    }
+    syncEmptyState();
+    const pending: Promise<void>[] = [];
+    const retry = renderFailed;
+    renderFailed = false;
+    tabs.forEach((tab, index) => {
+      const view = views[index];
+      if (!view) {
+        pending.push(createTabElements(tab, index));
+      } else {
+        view.button.textContent = tab.title;
+        if (pathChanged || retry || previous[index]?.content !== tab.content) {
+          pending.push(renderPanel(index));
+        }
+      }
+    });
+    syncEmptyState();
+    activeIndex = nextIndex;
+    activate(nextIndex, hadTabFocus);
+    await Promise.all(pending);
+    assertAlive();
+  }
+
+  function dispose(): void {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
+    listeners.clear();
+    if (editingIndex >= 0) {
+      notifyEditing(false);
+    }
+    if (host) {
+      plugin.activeTabs.delete(group.id);
+      for (const key of plugin.activeFrames.keys()) {
+        if (key.startsWith(group.id + ":")) {
+          plugin.activeFrames.delete(key);
+        }
+      }
+    }
+    component.unload();
+    element.empty();
+    element.classList.remove("code-tab", "is-editing");
+    element.removeAttribute("data-testid");
+  }
+
   tabs.forEach(createTabElements);
+  syncEmptyState();
 
   // 初始化只显示当前可用的标签，不覆盖已经记录的选择。保存后紧接新增时，
   // 宿主可能先用旧的标签数量重建一次；不能用这次临时的截断索引覆盖新标签索引。
   activate(activeIndex, false, false);
-  initializing = false;
-  await Promise.all(initialPreviews);
+  const ready = Promise.all(initialPreviews).then(() => {
+    assertAlive();
+    initializing = false;
+    notify();
+  });
+  const controller: TabGroupController = {
+    ready,
+    getSnapshot,
+    update: async (patch: CodeTabUpdate) => {
+      assertAlive();
+      if (
+        !patch ||
+        typeof patch !== "object" ||
+        (patch.source !== undefined && typeof patch.source !== "string") ||
+        (patch.sourcePath !== undefined && typeof patch.sourcePath !== "string") ||
+        (patch.readOnly !== undefined && typeof patch.readOnly !== "boolean")
+      ) {
+        throw new CodeTabError(CodeTabErrorCode.InvalidOptions, "无效的更新参数");
+      }
+      const nextSource =
+        patch.source === undefined ? source : host ? patch.source : normalizeNewlines(patch.source);
+      const nextPath = patch.sourcePath ?? sourcePath;
+      const nextReadOnly = host
+        ? (patch.readOnly ?? readOnly) || !host.onChange
+        : (patch.readOnly ?? readOnly);
+      if (
+        nextSource === source &&
+        nextPath === sourcePath &&
+        nextReadOnly === readOnly &&
+        !renderFailed
+      ) {
+        return;
+      }
+      assertIdle();
+      updating = true;
+      notify();
+      try {
+        await syncContents(nextSource, nextPath, nextReadOnly);
+      } catch (error) {
+        if (disposed) {
+          throw new CodeTabError(CodeTabErrorCode.Disposed, "标签组已释放", error);
+        }
+        throw new CodeTabError(CodeTabErrorCode.RenderFailed, "更新预览失败", error);
+      } finally {
+        updating = false;
+        notify();
+      }
+    },
+    apply: async (operations, options) => {
+      assertIdle();
+      if (readOnly) {
+        throw new CodeTabError(CodeTabErrorCode.ReadOnly, "标签组为只读");
+      }
+      if (!options || options.expectedRevision !== revision) {
+        throw new CodeTabError(CodeTabErrorCode.RevisionMismatch, "内容版本已变化，请重新读取快照");
+      }
+      if (!Array.isArray(operations)) {
+        throw new CodeTabError(CodeTabErrorCode.InvalidOperation, "operations 必须是数组");
+      }
+      if (!operations.length) {
+        return;
+      }
+      const result = applyTabOperations(tabs, operations, activeIndex);
+      const nextSource = result.tabs.length ? serializeSource(result.tabs) : null;
+      if (nextSource === source) {
+        return;
+      }
+      changingTabs = true;
+      notify();
+      try {
+        try {
+          await persistSource(source, nextSource);
+          assertAlive();
+        } catch (error) {
+          if (disposed) {
+            throw new CodeTabError(CodeTabErrorCode.Disposed, "标签组已释放", error);
+          }
+          throw new CodeTabError(CodeTabErrorCode.CommitFailed, "宿主未接受标签修改", error);
+        }
+        try {
+          await syncContents(nextSource ?? "", sourcePath, readOnly, result.activeIndex);
+        } catch (error) {
+          throw new CodeTabError(
+            disposed ? CodeTabErrorCode.Disposed : CodeTabErrorCode.RenderFailed,
+            "提交已接受，预览更新未完成",
+            error,
+          );
+        }
+      } finally {
+        changingTabs = false;
+        notify();
+      }
+    },
+    selectTab: (index) => {
+      assertIdle();
+      if (!Number.isInteger(index) || index < 0 || index >= tabs.length) {
+        throw new CodeTabError(CodeTabErrorCode.InvalidOptions, "标签索引无效");
+      }
+      activate(index);
+    },
+    focus: (target = "tab") => {
+      assertAlive();
+      if (target === "editor") {
+        if (!editorSession) {
+          throw new CodeTabError(CodeTabErrorCode.InvalidOptions, "没有活动编辑器");
+        }
+        editorSession.focus();
+      } else if (target === "content") {
+        const panel = views[activeIndex]?.panel;
+        if (panel) {
+          panel.tabIndex = -1;
+          panel.focus();
+        }
+      } else if (target === "tab") {
+        views[activeIndex]?.button.focus();
+      } else {
+        throw new CodeTabError(CodeTabErrorCode.InvalidOptions, "无效的焦点目标");
+      }
+    },
+    startEditing: (index = activeIndex) => {
+      assertIdle();
+      if (readOnly) {
+        throw new CodeTabError(CodeTabErrorCode.ReadOnly, "标签组为只读");
+      }
+      if (!Number.isInteger(index) || index < 0 || index >= views.length) {
+        throw new CodeTabError(CodeTabErrorCode.InvalidOptions, "标签索引无效");
+      }
+      const win = element.ownerDocument.defaultView;
+      if (!win) {
+        throw new CodeTabError(CodeTabErrorCode.InvalidOptions, "容器没有所属窗口");
+      }
+      const options: MouseEventInit = {
+        bubbles: true,
+      };
+      startEditing(index, new win.MouseEvent("click", options));
+    },
+    commit: async () => {
+      assertAlive();
+      if (changingTabs || interactions > 0 || updating || initializing) {
+        throw new CodeTabError(CodeTabErrorCode.Busy, "标签组正在变更");
+      }
+      if (saveCurrentEditor && !(await saveCurrentEditor())) {
+        if (
+          lastEditError instanceof CodeTabError &&
+          lastEditError.code === CodeTabErrorCode.RenderFailed
+        ) {
+          throw lastEditError;
+        }
+        throw new CodeTabError(
+          disposed ? CodeTabErrorCode.Disposed : CodeTabErrorCode.CommitFailed,
+          "当前草稿未保存",
+          lastEditError,
+        );
+      }
+    },
+    cancel: async () => {
+      assertAlive();
+      if (writes) {
+        throw new CodeTabError(CodeTabErrorCode.Busy, "保存已开始，请等待完成");
+      }
+      await cancelCurrentEditor?.();
+    },
+    subscribe: (listener) => {
+      assertAlive();
+      if (typeof listener !== "function") {
+        throw new CodeTabError(CodeTabErrorCode.InvalidOptions, "listener 必须是函数");
+      }
+      listeners.add(listener);
+      notify();
+      return () => listeners.delete(listener);
+    },
+    dispose,
+  };
+  return controller;
 }

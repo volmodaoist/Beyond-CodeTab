@@ -73,3 +73,12 @@
 .code-tab__native-editor.is-code-content .code-tab__fallback-editor {
   padding: var(--code-tab-code-padding);
 }
+
+/* 补全候选以浮层呈现，避免改变代码正文的自然高度。 */
+.cm-tooltip-autocomplete.code-tab__completion-tooltip {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-family: var(--font-monospace);
+}

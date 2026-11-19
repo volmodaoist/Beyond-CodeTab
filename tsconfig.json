@@ -6,7 +6,10 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
+
     "moduleResolution": "node",
+    // 按照 nodejs 路径查找规则寻找 import 对应文件或包
+    // 如果某个目录想要作为一个包, 可以通过 index.ts 提供入口 (其作为可类比 python __init__.py 模块)
     "forceConsistentCasingInFileNames": true
   },
   "include": ["src/**/*.ts"]

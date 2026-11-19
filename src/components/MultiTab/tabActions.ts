@@ -9,6 +9,7 @@ export interface TabActionsOptions {
   isLastTab: () => boolean;
   onRename: (title: string) => Promise<boolean>;
   onDelete: () => Promise<boolean>;
+  onInteractionChange?: (active: boolean) => void;
 }
 
 /** 只管理标题输入和确认界面；文件写入由标签组处理，失败时保留当前界面。 */
@@ -21,10 +22,13 @@ export function attachTabActions(options: TabActionsOptions): void {
 
   component.register(() => {
     menu?.hide();
-    dialog?.close();
+    dialog?.dispose();
   });
 
   component.registerDomEvent(button, "contextmenu", (event) => {
+    if (!options.canStart()) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     menu?.hide();
@@ -42,6 +46,7 @@ export function attachTabActions(options: TabActionsOptions): void {
           button.textContent || "",
           options.isLastTab(),
           options.onDelete,
+          options.onInteractionChange,
         );
         dialog.open();
       });
@@ -55,8 +60,10 @@ export function attachTabActions(options: TabActionsOptions): void {
     if (renameSession || hasTitleInput() || !options.canStart()) {
       return;
     }
+    let alive = true;
     const session = component.addChild(new Component());
     renameSession = session;
+    options.onInteractionChange?.(true);
     const input = button.ownerDocument.createElement("input");
     input.type = "text";
     input.className = "code-tab__rename-input";
@@ -67,8 +74,10 @@ export function attachTabActions(options: TabActionsOptions): void {
     // 用 input 暂时替换 button，避免把一个可交互控件嵌套在另一个控件中。
     button.replaceWith(input);
     session.register(() => {
+      alive = false;
       input.replaceWith(button);
       renameSession = null;
+      options.onInteractionChange?.(false);
     });
 
     let finished = false;
@@ -98,8 +107,14 @@ export function attachTabActions(options: TabActionsOptions): void {
       saving = true;
       input.readOnly = true;
       if (await options.onRename(title)) {
+        if (!alive || finished) {
+          return;
+        }
         finish(focus);
       } else {
+        if (!alive || finished) {
+          return;
+        }
         // 乐观回写冲突时保留用户输入，允许重试或 Esc 退出。
         saving = false;
         input.readOnly = false;
@@ -133,17 +148,22 @@ export function attachTabActions(options: TabActionsOptions): void {
 /** 使用宿主 Modal，默认焦点放在取消按钮；确认成功后才关闭。 */
 class DeleteTabModal extends Modal {
   private saving = false;
+  private disposed = false;
+  private interactionActive = false;
 
   constructor(
     app: App,
     private readonly title: string,
     private readonly lastTab: boolean,
     private readonly onConfirm: () => Promise<boolean>,
+    private readonly onInteractionChange?: (active: boolean) => void,
   ) {
     super(app);
   }
 
   onOpen(): void {
+    this.interactionActive = true;
+    this.onInteractionChange?.(true);
     this.setTitle("删除标签");
     this.containerEl.setAttribute("data-testid", "code-tab-delete-dialog");
     const description = this.contentEl.ownerDocument.createElement("p");
@@ -172,6 +192,9 @@ class DeleteTabModal extends Modal {
       confirm.disabled = true;
       cancel.disabled = true;
       const deleted = await this.onConfirm();
+      if (this.disposed) {
+        return;
+      }
       this.saving = false;
       if (deleted) {
         this.close();
@@ -191,7 +214,17 @@ class DeleteTabModal extends Modal {
     }
   }
 
+  dispose(): void {
+    this.disposed = true;
+    this.saving = false;
+    super.close();
+  }
+
   onClose(): void {
+    if (this.interactionActive) {
+      this.interactionActive = false;
+      this.onInteractionChange?.(false);
+    }
     this.contentEl.empty();
   }
 }

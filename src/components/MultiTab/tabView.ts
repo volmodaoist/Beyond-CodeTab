@@ -27,7 +27,7 @@ export function createTabView(options: CreateTabViewOptions): TabView {
   const tabId = "code-tab-tab-" + options.groupSuffix + "-" + options.index;
   const panelId = "code-tab-panel-" + options.groupSuffix + "-" + options.index;
 
-  const button = document.createElement("button");
+  const button = options.tabList.ownerDocument.createElement("button");
   button.className = "code-tab__tab";
   button.setAttribute("data-testid", "code-tab-tab");
   button.type = "button";
@@ -38,7 +38,7 @@ export function createTabView(options: CreateTabViewOptions): TabView {
   button.setAttribute("aria-controls", panelId);
   options.tabList.insertBefore(button, options.addButton);
 
-  const panel = document.createElement("div");
+  const panel = options.panels.ownerDocument.createElement("div");
   panel.className = "code-tab__panel markdown-rendered";
   panel.setAttribute("data-testid", "code-tab-panel");
   panel.id = panelId;
@@ -78,7 +78,7 @@ export function syncTabViews(views: TabView[], activeIndex: number, groupSuffix:
 export function reorderTabViews(
   views: TabView[],
   tabList: HTMLDivElement,
-  addButton: HTMLButtonElement,
+  addButton: HTMLButtonElement | null,
   panels: HTMLDivElement,
 ): void {
   for (const view of views) {
