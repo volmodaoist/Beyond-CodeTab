@@ -15,7 +15,7 @@ export interface TabView {
 interface CreateTabViewOptions {
   owner: MarkdownRenderChild;
   tabList: HTMLDivElement;
-  addButton: HTMLButtonElement;
+  addButton: HTMLButtonElement | null;
   panels: HTMLDivElement;
   groupSuffix: string;
   index: number;

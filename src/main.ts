@@ -1,5 +1,6 @@
 import { MarkdownRenderChild, Plugin } from "obsidian";
 import type { Command } from "obsidian";
+import { registerCodeBlockHost } from "./hostRender";
 import { renderTabGroup } from "./components/MultiTab";
 
 // 外层默认使用四个反引号，内部便可直接放常见的三个反引号代码块。
@@ -39,8 +40,10 @@ export default class CodeTabPlugin extends Plugin {
       // Obsidian 会卸载该组件，并清理通过组件注册的 DOM 事件。
       const component = new MarkdownRenderChild(element);
       context.addChild(component);
-      renderTabGroup(this, component, element, context, source);
+      return renderTabGroup(this, component, element, context, source);
     });
+
+    registerCodeBlockHost(this);
 
     const createTabCommand: Command = {
       id: "create-tab",

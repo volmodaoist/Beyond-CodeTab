@@ -42,6 +42,10 @@
 
 ## 2.2.1 之后（未发布）
 
+- 增加可选宿主渲染协议 v1：宿主提供真实文件路径、稳定组 ID、组件生命周期与正文提交回调，避免在节点片段中依赖原文件行号。
+- 宿主模式的内容编辑、增删标签、改名与排序共用保存回调；只读组保留切页，禁用编辑和标签管理。
+- 普通 Markdown 保持原有 Vault 保存方式；详细接口见 [host-rendering.md](host-rendering.md)。
+
 - `tabGroup.ts` 继续持有标签数据、编辑会话和安全写回事务；静态 DOM/ARIA 同步移入 `tabView.ts`，HTML5 拖拽瞬时状态移入 `tabDragController.ts`。
 - 混合 Markdown 围栏扫描移入 `fencedCodeRanges.ts`，Prism 高亮模块只负责分词和 CodeMirror decoration。
 - 原生编辑器与降级输入框样式移入 `editorStyles.css`，标签外壳和预览布局继续保留在 `styles.css`。

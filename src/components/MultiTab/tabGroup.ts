@@ -33,17 +33,42 @@ function getGroupInfo(context: MarkdownPostProcessorContext, element: HTMLElemen
   return group;
 }
 
-export function renderTabGroup(
+export interface TabGroupHost {
+  id: string;
+  readOnly: boolean;
+  onChange?: (expected: string, source: string | null) => Promise<void>;
+  onEditingChange?: (editing: boolean) => void;
+}
+
+export async function renderTabGroup(
   plugin: CodeTabPlugin,
   component: MarkdownRenderChild,
   element: HTMLElement,
   context: MarkdownPostProcessorContext,
   initialSource: string,
+  host?: TabGroupHost,
 ) {
   // source 不含最外层 ```tab fence，只包含各标签的声明和正文。
   let source = normalizeNewlines(initialSource);
   let tabs = parseTabs(source);
-  const group = getGroupInfo(context, element);
+  const group: TabGroupInfo = host
+    ? {
+        id: host.id,
+        lineStart: 0,
+      }
+    : getGroupInfo(context, element);
+  const persistSource = async (expected: string, next: string | null): Promise<void> => {
+    if (host?.onChange) {
+      await host.onChange(expected, next);
+      return;
+    }
+    await updateMarkdownSource(plugin.app, context.sourcePath, group.lineStart, expected, next);
+  };
+  if (host) {
+    component.register(() => plugin.activeTabs.delete(group.id));
+  }
+  const initialPreviews: Promise<void>[] = [];
+  let initializing = true;
 
   element.empty();
   element.addClass("code-tab");
@@ -73,7 +98,9 @@ export function renderTabGroup(
   setIcon(addButton, "plus");
   addButton.setAttribute("aria-label", "新增标签");
   addButton.title = "新增标签";
-  tabList.appendChild(addButton);
+  if (!host?.readOnly) {
+    tabList.appendChild(addButton);
+  }
 
   const panels = document.createElement("div");
   panels.className = "code-tab__panels";
@@ -140,12 +167,16 @@ export function renderTabGroup(
   };
 
   const startEditing = (index: number, click: MouseEvent) => {
+    if (host?.readOnly) {
+      return;
+    }
     // 一个标签组同时只编辑一个页面。编辑器负责输入，标签组统一负责写回和状态切换。
     if (editingIndex >= 0 || changingTabs || views[index].rendering) {
       return;
     }
     activate(index);
     editingIndex = index;
+    host?.onEditingChange?.(true);
     element.addClass("is-editing");
     const view = views[index];
     const panel = view.panel;
@@ -185,6 +216,7 @@ export function renderTabGroup(
         }
       } finally {
         editingIndex = -1;
+        host?.onEditingChange?.(false);
         saveCurrentEditor = null;
         element.removeClass("is-editing");
       }
@@ -214,13 +246,7 @@ export function renderTabGroup(
             return nextTab;
           });
           const nextSource = serializeTabs(nextTabs);
-          await updateMarkdownSource(
-            plugin.app,
-            context.sourcePath,
-            group.lineStart,
-            source,
-            nextSource,
-          );
+          await persistSource(source, nextSource);
           tabs = nextTabs;
           source = nextSource;
         }
@@ -296,13 +322,7 @@ export function renderTabGroup(
       } else {
         plugin.activeTabs.set(group.id, nextIndex);
       }
-      await updateMarkdownSource(
-        plugin.app,
-        context.sourcePath,
-        group.lineStart,
-        source,
-        nextSource,
-      );
+      await persistSource(source, nextSource);
       tabs = nextTabs;
       source = nextSource ?? "";
       if (title === null) {
@@ -359,13 +379,7 @@ export function renderTabGroup(
     try {
       // 宿主可能在写回后立即重建组件，先记录同一活动标签的新位置。
       plugin.activeTabs.set(group.id, nextActiveIndex);
-      await updateMarkdownSource(
-        plugin.app,
-        context.sourcePath,
-        group.lineStart,
-        source,
-        nextSource,
-      );
+      await persistSource(source, nextSource);
       tabs = nextTabs;
       source = nextSource;
       if (element.isConnected) {
@@ -401,13 +415,16 @@ export function renderTabGroup(
     const view = createTabView({
       owner: component,
       tabList,
-      addButton,
+      addButton: host?.readOnly ? null : addButton,
       panels,
       groupSuffix,
       index,
       title: tab.title,
     });
     const button = view.button;
+    if (host?.readOnly) {
+      button.draggable = false;
+    }
     const panel = view.panel;
     const tabComponent = view.component;
     views.push(view);
@@ -434,7 +451,9 @@ export function renderTabGroup(
       }
       activate(next, true);
     });
-    dragController.attach(tabComponent, view);
+    if (!host?.readOnly) {
+      dragController.attach(tabComponent, view);
+    }
     const actions: TabActionsOptions = {
       app: plugin.app,
       component: tabComponent,
@@ -444,8 +463,21 @@ export function renderTabGroup(
       onRename: (title) => changeTab(views.indexOf(view), title),
       onDelete: () => changeTab(views.indexOf(view), null),
     };
-    attachTabActions(actions);
-    renderPanel(index);
+    if (!host?.readOnly) {
+      attachTabActions(actions);
+    }
+    if (host && !host.readOnly) {
+      panel.setAttribute("data-codeblock-interactive", "true");
+    }
+    if (host) {
+      button.setAttribute("data-codeblock-interactive", "true");
+    }
+    const rendered = renderPanel(index);
+    if (initializing) {
+      initialPreviews.push(rendered);
+    } else {
+      void rendered.catch((error: unknown) => console.error("Code Tab: preview failed", error));
+    }
     tabComponent.registerDomEvent(panel, "mousedown", (event) => {
       const target = event.target as Element | null;
       if (editingIndex < 0 && target && previewTargetStartsEditing(target)) {
@@ -499,13 +531,7 @@ export function renderTabGroup(
       const nextSource = source + "\n\n" + serializeTabs([tab]);
       // 宿主可能因文件更新重建组件，先记录选择，让重建后的组件也显示新标签。
       plugin.activeTabs.set(group.id, index);
-      await updateMarkdownSource(
-        plugin.app,
-        context.sourcePath,
-        group.lineStart,
-        source,
-        nextSource,
-      );
+      await persistSource(source, nextSource);
       tabs.push(tab);
       source = nextSource;
       if (element.isConnected) {
@@ -532,4 +558,6 @@ export function renderTabGroup(
   // 初始化只显示当前可用的标签，不覆盖已经记录的选择。保存后紧接新增时，
   // 宿主可能先用旧的标签数量重建一次；不能用这次临时的截断索引覆盖新标签索引。
   activate(activeIndex, false, false);
+  initializing = false;
+  await Promise.all(initialPreviews);
 }
