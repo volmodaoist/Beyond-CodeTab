@@ -30,7 +30,7 @@ export interface ExcalidrawSceneSource {
 }
 
 /**
- * 将 Excalidraw 的可选、非公开插件入口收敛成 Code Tab 使用的最小能力。
+ * 将 Excalidraw 的可选、非公开插件入口收敛成 Beyond-CodeTab 使用的最小能力。
  *
  * 不同版本可能把 ExcalidrawAutomate 暴露为 `ea`、`getEA()` 或插件自身；
  * 兼容变化应只修改此文件，Frame Deck 不感知插件对象的实际形状。

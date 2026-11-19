@@ -1,8 +1,10 @@
-# Obsidian Code Tab（轻量预览与原生编辑版）
+# Beyond-CodeTab
 
 在 Obsidian 笔记中使用 Markdown 创建可切换的标签页，并直接在阅读界面里编辑标签内容。
 
-本派生版本由 **volmodaoist** 开发和维护，基于 [lazyloong/obsidian-code-tab](https://github.com/lazyloong/obsidian-code-tab) 的 `2.0-alpha` 版本改造，重点解决两个体验问题：
+项目主页：[volmodaoist/Beyond-CodeTab](https://github.com/volmodaoist/Beyond-CodeTab)。
+
+**Beyond-CodeTab** 由 [volmodaoist](https://github.com/volmodaoist) 开发和维护，基于 [lazyloong/obsidian-code-tab](https://github.com/lazyloong/obsidian-code-tab) 的 `2.0-alpha` 版本改造，重点解决两个体验问题：
 
 - 浏览时不为每个标签常驻一个完整 Markdown 编辑器，减少多余留白和复杂控件。
 - 编辑时按需使用 Obsidian 原生 Markdown 编辑器，代码正文与预览共用高亮规则。
@@ -56,7 +58,9 @@ npm run build
    styles.css
    ```
 3. 打开 Obsidian 的“设置 → 第三方插件”。
-4. 关闭并重新打开 Code Tab，或者重启 Obsidian。
+4. 关闭并重新打开 Beyond-CodeTab，或者重启 Obsidian。
+
+显示名称为 `Beyond-CodeTab`，安装目录和插件 ID 使用 `obsidian-code-tab`，以延续已有安装、快捷键与补全设置。
 
 如果 Obsidian 尚未识别插件，可以先执行“重新加载插件”，再确认目录名和 `manifest.json` 中的 `id` 都是 `obsidian-code-tab`。
 
@@ -119,7 +123,7 @@ int main() {
 打开命令面板，执行：
 
 ```text
-Code Tab: 创建标签组件
+Beyond-CodeTab: 创建标签组件
 ```
 
 插件会在光标处插入包含两个标签的模板。
@@ -302,7 +306,7 @@ obsidian-code-tab/
 
 ### 核心术语与数据流
 
-Code Tab 使用外层 fenced code block 注册 `tab` 处理器，块内每条 `tab: 标题` 声明一个标签。标签正文仍是普通 Markdown，可以包含段落、表格、嵌入和内层代码块；内层代码围栏中的 `tab:` 不会被识别为新标签。
+Beyond-CodeTab 使用外层 fenced code block 注册 `tab` 处理器，块内每条 `tab: 标题` 声明一个标签。标签正文仍是普通 Markdown，可以包含段落、表格、嵌入和内层代码块；内层代码围栏中的 `tab:` 不会被识别为新标签。
 
 | 名称           | 职责                                                                   |
 | -------------- | ---------------------------------------------------------------------- |
@@ -394,7 +398,7 @@ npm run lint && npm test && npm run build
 
 1. 在 Obsidian 中创建并打开一个专门用于开发测试的笔记仓库（Vault）。
 2. 执行 `npm run build`，将 `dist/` 中的三个文件复制到测试仓库的 `.obsidian/plugins/obsidian-code-tab/`。
-3. 在“设置 → 第三方插件”中启用 Code Tab。
+3. 在“设置 → 第三方插件”中启用 Beyond-CodeTab。
 4. 新建笔记，粘贴本文“快速开始”中的示例，在阅读视图中检查标签和编辑效果。
 5. 每次修改后，等待 `npm run dev` 完成构建，或重新执行 `npm run build`；再次复制产物，并关闭再启用插件，或重启 Obsidian。
 
@@ -402,11 +406,13 @@ npm run lint && npm test && npm run build
 
 ## 分享与致谢
 
-本版本基于以下项目改造：
+本项目维护者：[volmodaoist](https://github.com/volmodaoist)。当前仓库：[Beyond-CodeTab](https://github.com/volmodaoist/Beyond-CodeTab)。
+
+代码来源：
 
 - 上游仓库：[lazyloong/obsidian-code-tab](https://github.com/lazyloong/obsidian-code-tab)
 - 上游版本：`2.0-alpha`
 - 上游作者：lazyloong
 - 许可证：MIT
 
-如果要公开发布修改版，建议在仓库说明和 Release 中保留上述来源，并明确标注这是派生版本。
+根许可证记录本项目的版权信息；来源署名和补全模块随附的许可说明继续保留。

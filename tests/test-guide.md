@@ -1,4 +1,4 @@
-# Code Tab 测试
+# Beyond-CodeTab 测试
 
 测试脚本随项目保存在本目录，使用 Node.js 20 或更高版本。真实界面回归还需要本机安装 Obsidian。
 

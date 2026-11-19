@@ -56,7 +56,7 @@ export function createPluginApi(
     markdownContext?: MarkdownPostProcessorContext,
   ): Promise<CodeTabHandle> => {
     if (disabled) {
-      throw new CodeTabError(CodeTabErrorCode.Disposed, "Code Tab 已停用");
+      throw new CodeTabError(CodeTabErrorCode.Disposed, "Beyond-CodeTab 已停用");
     }
     if (
       !options ||
@@ -72,7 +72,7 @@ export function createPluginApi(
       (options.onChange !== undefined && typeof options.onChange !== "function") ||
       (options.onEditingChange !== undefined && typeof options.onEditingChange !== "function")
     ) {
-      throw new CodeTabError(CodeTabErrorCode.InvalidOptions, "无效的 Code Tab 挂载参数");
+      throw new CodeTabError(CodeTabErrorCode.InvalidOptions, "无效的 Beyond-CodeTab 挂载参数");
     }
     const previous = owners.get(options.container);
     if (previous) {

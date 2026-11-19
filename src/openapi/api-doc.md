@@ -1,4 +1,4 @@
-# Code Tab API 使用说明
+# Beyond-CodeTab API 使用说明
 
 统一 API 位于 `src/openapi/`。当前工作树已实现，尚未发布；没有 v1/v2 区分，旧的 `obsidian-codeblock-render` 事件已移除。
 
@@ -96,7 +96,7 @@ await handle.apply([operation], applyOptions);
 
 ## 4. 自定义补全
 
-`api.completion` 内置 Java、C、C++、Python、JS/TS、Go、Shell 的词表补全。Code Tab 原生编辑器自动消费；支持输入触发和 Ctrl+Space。Esc 先关闭候选，再取消编辑。
+`api.completion` 内置 Java、C、C++、Python、JS/TS、Go、Shell 的词表补全。Beyond-CodeTab 原生编辑器自动消费；支持输入触发和 Ctrl+Space。Esc 先关闭候选，再取消编辑。
 
 ```ts
 import type { CompletionRule, CompletionWordList } from "./code-tab-api";
@@ -121,9 +121,9 @@ removeRule();
 
 正则匹配光标前的当前行；词表默认只替换当前词。`replaceWords/replaceRule` 替换同 id 注册项，`unregister(id)` 移除，`list()` 查看注册项。id 建议带插件前缀；`config:` 为用户配置保留。
 
-其他编辑器可调用 `complete(context)` 获取候选；范围是**代码正文的 UTF-16 偏移**，由适配器检查版本、光标与取消信号后插入。`configure` 整体替换声明配置；普通用户可在 Code Tab 设置页编辑 JSON 并应用保存。详细示例见 [补全 Core](../../docs/feat/code-completion-core.md)。
+其他编辑器可调用 `complete(context)` 获取候选；范围是**代码正文的 UTF-16 偏移**，由适配器检查版本、光标与取消信号后插入。`configure` 整体替换声明配置；普通用户可在 Beyond-CodeTab 设置页编辑 JSON 并应用保存。详细示例见 [补全 Core](../../docs/feat/code-completion-core.md)。
 
-接入方只清理自己的规则。`api.completion.dispose()` 会关闭全插件共享补全，应由 Code Tab 生命周期调用。
+接入方只清理自己的规则。`api.completion.dispose()` 会关闭全插件共享补全，应由 Beyond-CodeTab 生命周期调用。
 
 ## 5. 错误处理
 

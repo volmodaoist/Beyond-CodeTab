@@ -184,7 +184,7 @@ export function codeCompletionExtensions(
       return result;
     } catch (error) {
       if (!(error instanceof CompletionError)) {
-        console.error("Code Tab: completion source failed", error);
+        console.error("Beyond-CodeTab: completion source failed", error);
       }
       return null;
     }

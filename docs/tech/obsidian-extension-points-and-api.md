@@ -1,14 +1,14 @@
 # Obsidian 扩展点与官方 API 导览
 
-这篇文档回答两个问题：**插件可以接入 Obsidian 的哪些位置，以及接入以后可以调用哪些宿主能力。** 可以先读 [从 Code Tab 入门 Obsidian 插件开发](./obsidian-plugin-development-guide.md)，再用本文按功能查找 API。
+这篇文档回答两个问题：**插件可以接入 Obsidian 的哪些位置，以及接入以后可以调用哪些宿主能力。** 可以先读 [从 Beyond-CodeTab 入门 Obsidian 插件开发](./obsidian-plugin-development-guide.md)，再用本文按功能查找 API。
 
-本文的 API 基线为本仓库安装的官方 `obsidian@1.13.1` 类型声明，Code Tab 接入位置已按 2026-09-28 的源码更新。它是一份按任务组织的导航，完整签名和版本要求以对应版本的 `obsidian.d.ts` 为准。示例中的 `DemoPlugin` 是独立教学示例，不表示仓库已经实现了相应功能。
+本文的 API 基线为本仓库安装的官方 `obsidian@1.13.1` 类型声明，Beyond-CodeTab 接入位置已按 2026-09-28 的源码更新。它是一份按任务组织的导航，完整签名和版本要求以对应版本的 `obsidian.d.ts` 为准。示例中的 `DemoPlugin` 是独立教学示例，不表示仓库已经实现了相应功能。
 
 ## 1. 扩展点和 API 分别是什么
 
 **扩展点决定“何时调用你的代码”，API 决定“你的代码可以做什么”。**
 
-例如，Code Tab 调用 `registerMarkdownCodeBlockProcessor("tab", handler)`，注册了一个扩展点：宿主渲染 `tab` 代码块时调用 `handler`。处理函数内部再调用 `MarkdownRenderer.render()`，使用宿主的 Markdown 渲染能力。
+例如，Beyond-CodeTab 调用 `registerMarkdownCodeBlockProcessor("tab", handler)`，注册了一个扩展点：宿主渲染 `tab` 代码块时调用 `handler`。处理函数内部再调用 `MarkdownRenderer.render()`，使用宿主的 Markdown 渲染能力。
 
 | 类型 | 谁发起调用 | 例子 | 你需要提供什么 |
 | --- | --- | --- | --- |
@@ -101,7 +101,7 @@ export default class DemoPlugin extends Plugin {
 
 需要条件控制时使用 `checkCallback` 或 `editorCheckCallback`。当 `checking === true` 时只判断命令能否执行，不能在这个阶段写文件、弹窗或改变选区。
 
-当前 Code Tab 的 [src/main.ts](../src/main.ts) 使用 `editorCallback` 和 `editor.replaceSelection(TAB_TEMPLATE)` 插入顶部常量定义的标签模板。
+当前 Beyond-CodeTab 的 [src/main.ts](../src/main.ts) 使用 `editorCallback` 和 `editor.replaceSelection(TAB_TEMPLATE)` 插入顶部常量定义的标签模板。
 
 ### 4.2 同一个动作可以有不同入口
 
@@ -118,7 +118,7 @@ export default class DemoPlugin extends Plugin {
 
 文件右键菜单回调已经给出了目标 `file`，应使用这个对象；工作区当前激活文件可能是另外一个文件。
 
-Code Tab 的 [tabActions.ts](../src/components/MultiTab/tabActions.ts) 在标签按钮的 `contextmenu` 事件中创建 `Menu`，用 `setUseNativeMenu(false)` 选择随主题显示的 DOM 菜单，再通过 `Modal` 确认删除。双击改名使用临时 HTML 输入框。这些界面通过回调交给 `tabGroup.ts` 写回，不直接修改 Vault。
+Beyond-CodeTab 的 [tabActions.ts](../src/components/MultiTab/tabActions.ts) 在标签按钮的 `contextmenu` 事件中创建 `Menu`，用 `setUseNativeMenu(false)` 选择随主题显示的 DOM 菜单，再通过 `Modal` 确认删除。双击改名使用临时 HTML 输入框。这些界面通过回调交给 `tabGroup.ts` 写回，不直接修改 Vault。
 
 ## 5. Markdown 渲染和编辑器扩展
 
@@ -126,7 +126,7 @@ Code Tab 的 [tabActions.ts](../src/components/MultiTab/tabActions.ts) 在标签
 
 | 能力 | 输入和作用对象 | 适合做什么 |
 | --- | --- | --- |
-| `registerMarkdownCodeBlockProcessor()` | 特定语言标记的代码块内部文本和 DOM 容器 | Code Tab、图表、交互卡片 |
+| `registerMarkdownCodeBlockProcessor()` | 特定语言标记的代码块内部文本和 DOM 容器 | Beyond-CodeTab、图表、交互卡片 |
 | `registerMarkdownPostProcessor()` | 已渲染的 Markdown DOM 片段 | 增强表格、处理链接、添加展示效果 |
 | `MarkdownRenderer.render()` | Markdown 字符串和目标容器 | 在自己创建的面板、弹窗中显示 Markdown |
 | `Editor` | 编辑器文本及选区 | 插入模板、替换文本、移动光标 |
@@ -186,7 +186,7 @@ export default class DemoPreviewPlugin extends Plugin {
 
 `registerEditorExtension()` 接受 CodeMirror 6 的 `Extension` 或扩展数组。`ViewPlugin`、`StateField`、`Decoration` 等来自 CodeMirror 包；Obsidian 还公开了 `editorInfoField`、`editorLivePreviewField` 等用于连接宿主上下文的字段。扩展应区分源码模式与实时预览，也要跟随编辑器生命周期处理状态。
 
-Code Tab 只改造自己临时创建的编辑器，因此没有调用插件级 `registerEditorExtension()`。当前 [tabEditor.ts](../src/components/MultiTab/tabEditor.ts) 通过 `StateEffect.appendConfig` 安装局部扩展：`CodeBlockEditor` 提供围栏折叠、编辑边界保护和 Prism mark 装饰，类型改变时通过 `Compartment.reconfigure()` 更新着色。外层 DOM 标记和表格边界属性通过 `EditorView.editorAttributes` 声明，跟随文档更新。
+Beyond-CodeTab 只改造自己临时创建的编辑器，因此没有调用插件级 `registerEditorExtension()`。当前 [tabEditor.ts](../src/components/MultiTab/tabEditor.ts) 通过 `StateEffect.appendConfig` 安装局部扩展：`CodeBlockEditor` 提供围栏折叠、编辑边界保护和 Prism mark 装饰，类型改变时通过 `Compartment.reconfigure()` 更新着色。外层 DOM 标记和表格边界属性通过 `EditorView.editorAttributes` 声明，跟随文档更新。
 
 Prism 由 [tabPreview.ts](../src/components/MultiTab/tabPreview.ts) 调用公开的 `loadPrism()` 加载；普通 Markdown、表格和嵌入继续交给 `MarkdownRenderer.render()`。右下角输入的类型也可以是插件处理器名，不限于 Prism 语言。
 
@@ -258,7 +258,7 @@ export default class DemoViewPlugin extends Plugin {
 
 对于与文件内容绑定的视图，可继续看 `FileView`、`TextFileView`。后者提供 `getViewData()`、`setViewData()`、`clear()` 等接口，让视图参与文本文件的载入和保存。再通过 `registerExtensions(["myboard"], VIEW_TYPE)`，把自己的扩展名交给已注册的视图处理。
 
-如果只是想在笔记中显示一个交互块，优先使用代码块处理器；只有需要独立页面、独立导航或自定义文件类型时，才需要注册视图。Code Tab 当前使用的是前一种方式。
+如果只是想在笔记中显示一个交互块，优先使用代码块处理器；只有需要独立页面、独立导航或自定义文件类型时，才需要注册视图。Beyond-CodeTab 当前使用的是前一种方式。
 
 ## 7. 文件、属性和元数据索引
 
@@ -298,7 +298,7 @@ export async function markReviewed(app: App, file: TFile): Promise<void> {
 
 调用方需要处理返回 Promise 的失败，例如 YAML 格式错误。`processFrontMatter()` 提供属性层面的修改，不承诺逐字保持原 YAML 的排版。
 
-当前 Code Tab 在 [src/markdown.ts](../src/markdown.ts) 中使用 `vault.process()` 保存标签内容，并校验原代码块内容是否仍然匹配。两者承担不同责任：`process()` 提供宿主层的读改写操作；旧内容匹配判断这次编辑基于的内容是否已经过时。文件 API 不会自动知道“这个标签块是不是用户开始编辑时的那个”。
+当前 Beyond-CodeTab 在 [src/markdown.ts](../src/markdown.ts) 中使用 `vault.process()` 保存标签内容，并校验原代码块内容是否仍然匹配。两者承担不同责任：`process()` 提供宿主层的读改写操作；旧内容匹配判断这次编辑基于的内容是否已经过时。文件 API 不会自动知道“这个标签块是不是用户开始编辑时的那个”。
 
 `vault.process()` 的转换函数必须同步返回字符串，不能写成 `async`。它也不是与所有外部编辑器和同步工具之间的分布式锁。
 
@@ -357,7 +357,7 @@ export function registerHeadingLog(plugin: Plugin): void {
 
 插件级功能挂在 `Plugin` 上；某个代码块自己的事件挂在该块的 `MarkdownRenderChild` 上。否则代码块消失后，资源可能继续留到整个插件卸载时才释放。
 
-Code Tab 在 [src/main.ts](../src/main.ts) 中为每个 `tab` 块创建 `MarkdownRenderChild`，在 [tabGroup.ts](../src/components/MultiTab/tabGroup.ts) 中为每页建立生命周期组件。编辑时再挂载 [TabEditor](../src/components/MultiTab/tabEditor.ts)，由它管理原生 embed、类型输入框和输入事件；保存、取消或整块卸载时一起释放。窗口捕获阶段的键盘监听和类型输入定时器通过 `register(cleanup)` 清理。
+Beyond-CodeTab 在 [src/main.ts](../src/main.ts) 中为每个 `tab` 块创建 `MarkdownRenderChild`，在 [tabGroup.ts](../src/components/MultiTab/tabGroup.ts) 中为每页建立生命周期组件。编辑时再挂载 [TabEditor](../src/components/MultiTab/tabEditor.ts)，由它管理原生 embed、类型输入框和输入事件；保存、取消或整块卸载时一起释放。窗口捕获阶段的键盘监听和类型输入定时器通过 `register(cleanup)` 清理。
 
 监听文件修改后再次写同一文件，可能触发自己的监听器。需要通过内容是否变化、操作来源或业务条件避免重复写入。`vault` 的 `create` 事件在启动加载库时也可能出现；只关心启动后的新文件时，可在 `onLayoutReady()` 中再注册。
 
@@ -410,7 +410,7 @@ export default class DemoSettingsPlugin extends Plugin {
 
 旧教程常见的方式是覆盖 `display()`，再通过 `new Setting(containerEl).addToggle(...)` 手动创建控件并调用 `saveData()`。1.13.1 的声明将 `display()` 标记为自 1.13.0 起弃用，建议新设置页使用 `getSettingDefinitions()`；需要兼容旧版时仍要设计相应的回退路径。
 
-配置文件被同步工具从外部更新时，可以实现 `onExternalSettingsChange()` 重新读取设置。内存状态与持久化状态也要区分：Code Tab 的 `activeTabs` 是插件实例内的 Map，不会自动保存到 `data.json`。
+配置文件被同步工具从外部更新时，可以实现 `onExternalSettingsChange()` 重新读取设置。内存状态与持久化状态也要区分：Beyond-CodeTab 的 `activeTabs` 是插件实例内的 Map，不会自动保存到 `data.json`。
 
 ## 10. 外部调用、网络请求和通用工具
 
@@ -492,7 +492,7 @@ Bases 自定义视图适合把属性查询结果展示为卡片、时间线或�
 
 判断一个接口是否公开，先查对应版本的官方类型声明和开发文档。控制台里能访问到某个属性，或者自己给它补上了 TypeScript 类型，都不等于宿主承诺支持它。
 
-当前 Code Tab 是很直观的例子：
+当前 Beyond-CodeTab 是很直观的例子：
 
 | 仓库中的使用位置 | API 或机制 | 边界 |
 | --- | --- | --- |
@@ -509,7 +509,7 @@ Bases 自定义视图适合把属性查询结果展示为卡片、时间线或�
 
 在本文核对的公开 API 中，`Editor` 主要用于操作已有的编辑器，没有与本项目 `embedRegistry` 用法等价的“在任意容器创建完整原生 Markdown embed editor”的公开工厂。
 
-因此，Code Tab 的浏览态使用公开 `MarkdownRenderer`，进入编辑态时才尝试内部 embed 接口，失败后回退到 `textarea`。学习时可以先用公开渲染和简单输入控件完成业务流程，再研究这层内部集成。
+因此，Beyond-CodeTab 的浏览态使用公开 `MarkdownRenderer`，进入编辑态时才尝试内部 embed 接口，失败后回退到 `textarea`。学习时可以先用公开渲染和简单输入控件完成业务流程，再研究这层内部集成。
 
 Obsidian 也没有把所有内置功能都开放为注册接口。例如，不能仅凭控制台出现了某个设置管理器，就推断存在稳定的“注册任意 Properties 类型”能力。需要的功能在公开声明中找不到时，应先确认文档和版本，再决定是否采用替代实现。
 
@@ -543,4 +543,4 @@ rg -n 'registerCliHandler|getSettingDefinitions|@deprecated' node_modules/obsidi
 - [Markdown 后处理文档](https://docs.obsidian.md/Plugins/Editor/Markdown+post+processing)：理解渲染扩展点。
 - [CodeMirror 6 扩展文档](https://docs.obsidian.md/Plugins/Editor/CodeMirror+6+extensions)：继续学习编辑器层扩展。
 
-下一步最适合做的练习，是为 Code Tab 增加一个独立命令：读取当前笔记、统计其中的标签块，再用 `Notice` 显示结果。这个练习能串起命令入口、工作区、文件 API 和已有解析逻辑，同时保留清晰的功能边界。
+下一步最适合做的练习，是为 Beyond-CodeTab 增加一个独立命令：读取当前笔记、统计其中的标签块，再用 `Notice` 显示结果。这个练习能串起命令入口、工作区、文件 API 和已有解析逻辑，同时保留清晰的功能边界。

@@ -31,6 +31,6 @@ engine.dispose();
 
 `registerWords/replaceWords/registerRule/replaceRule` 返回清理函数。id 建议添加调用方前缀；`config:` 由声明配置保留。`configure` 整体替换用户声明，不影响普通注册项。失败规则通过结果的 failures 报告，其他规则仍能返回候选。取消、注册版本变化和释放拒绝迟到结果。
 
-在 Code Tab 根目录运行 `node --test src/core/completion/tests/*.test.mjs`。复制到其他项目时，测试需要 Node.js 20+ 与 esbuild；可先安装 `npm install --save-dev esbuild`。测试本身打包 index.ts，不加载任何宿主模块。
+在 Beyond-CodeTab 根目录运行 `node --test src/core/completion/tests/*.test.mjs`。复制到其他项目时，测试需要 Node.js 20+ 与 esbuild；可先安装 `npm install --save-dev esbuild`。测试本身打包 index.ts，不加载任何宿主模块。
 
-部分词表参考同一作者的 obsidian-leetcode 编辑器，已移除题库专用的 TreeNode、ListNode 等条目。完整契约和 JSON 配置示例见 Code Tab 的 `docs/feat/code-completion-core.md`。
+部分词表参考同一作者的 obsidian-leetcode 编辑器，已移除题库专用的 TreeNode、ListNode 等条目。完整契约和 JSON 配置示例见 Beyond-CodeTab 的 `docs/feat/code-completion-core.md`。

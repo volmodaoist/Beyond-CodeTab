@@ -1,6 +1,6 @@
 # Obsidian 插件开发入门
 
-本文按当前 Code Tab 源码说明开发流程。派生版本由 **volmodaoist** 开发和维护，上游来源与 MIT 许可证说明见 [README](../README.md#分享与致谢)。
+本文按当前 Beyond-CodeTab 源码说明开发流程。派生版本由 **volmodaoist** 开发和维护，上游来源与 MIT 许可证说明见 [README](../../README.md#分享与致谢)。
 
 ## 1. 插件开发的基本原理
 
@@ -8,7 +8,7 @@
 
 Obsidian 桌面端基于 Electron，界面使用 HTML、CSS 和 JavaScript。插件可以像前端代码一样创建 DOM、监听鼠标事件、修改样式，同时还能调用 Obsidian 的能力，例如读取笔记、添加命令和渲染 Markdown。
 
-以 Code Tab 为例，可以分成三层：
+以 Beyond-CodeTab 为例，可以分成三层：
 
 | 层次 | 职责 | 本插件中的例子 |
 | --- | --- | --- |
@@ -64,7 +64,7 @@ import { Plugin } from "obsidian";
 | `main.js` | 构建后的插件代码，供 Obsidian 执行 |
 | `styles.css` | 插件样式；插件机制允许省略，本项目需要它 |
 
-本仓库的 [manifest.json](../../manifest.json) 中，插件 ID 为 `obsidian-code-tab`，显示名称为 `Code Tab`。`minAppVersion` 是声明的最低版本，并不能替代实际兼容性验证，尤其是涉及内部 API 时。
+本仓库的 [manifest.json](../../manifest.json) 中，插件 ID 为 `obsidian-code-tab`，显示名称为 `Beyond-CodeTab`。`minAppVersion` 是声明的最低版本，并不能替代实际兼容性验证，尤其是涉及内部 API 时。
 
 **开发时编辑 `src/`，Obsidian 加载的是构建产物 `main.js`。**
 
@@ -123,7 +123,7 @@ export default class CodeTabPlugin extends Plugin {
 
 ### 命令是另一条独立入口
 
-同一个 `onload()` 还调用了 `addCommand()`。用户执行“Code Tab: 创建标签组件”时，`editorCallback` 获得当前编辑器，并执行：
+同一个 `onload()` 还调用了 `addCommand()`。用户执行“Beyond-CodeTab: 创建标签组件”时，`editorCallback` 获得当前编辑器，并执行：
 
 ```ts
 editor.replaceSelection(TAB_TEMPLATE);
@@ -443,7 +443,7 @@ npm run build
 
 `npm run build` 包含 TypeScript 类型检查，然后生成 `dist/main.js`、`dist/manifest.json`、`dist/styles.css`。
 
-将这三个文件复制到测试笔记库的 `.obsidian/plugins/obsidian-code-tab/`，在 Obsidian 的第三方插件设置里启用 Code Tab。已经启用时，关闭再打开插件或重启应用以加载新代码。
+将这三个文件复制到测试笔记库的 `.obsidian/plugins/obsidian-code-tab/`，在 Obsidian 的第三方插件设置里启用 Beyond-CodeTab。已经启用时，关闭再打开插件或重启应用以加载新代码。
 
 持续开发时运行：
 
@@ -462,7 +462,7 @@ npm run dev
 在 macOS 的 Obsidian 中按 `Cmd + Option + I` 打开开发者工具，在代码块处理函数内临时添加：
 
 ```ts
-console.log("Code Tab render", source, context.sourcePath, context.getSectionInfo(element));
+console.log("Beyond-CodeTab render", source, context.sourcePath, context.getSectionInfo(element));
 ```
 
 这能直接展示“笔记中的文本如何进入插件”。`getSectionInfo()` 可能返回 `null`，后续使用位置信息时需要处理这种情况，当前 `getGroupInfo()` 也有对应分支。

@@ -1,6 +1,6 @@
 # 可移植代码补全 Core
 
-状态：已在当前工作树实现，尚未发布。目录为 `src/core/completion/`，公开导出在 index.ts；Code Tab 通过 `api.completion` 提供共享实例。拼写 completion 正确。
+状态：已在当前工作树实现，尚未发布。目录为 `src/core/completion/`，公开导出在 index.ts；Beyond-CodeTab 通过 `api.completion` 提供共享实例。拼写 completion 正确。
 
 ## 当前范围
 
@@ -36,7 +36,7 @@ Core 不跟踪宿主光标；适配器必须在应用结果前检查当前会话
 | `complete(context)` | 异步聚合、去重、排序，最多返回 200 项 |
 | `configure(configuration)` | 整体校验后替换用户声明配置，失败保留旧配置 |
 | `getRevision()` / `subscribe(listener)` | 注册版本与变化通知，返回取消函数 |
-| `dispose()` | 关闭独立引擎；共享实例由 Code Tab 释放 |
+| `dispose()` | 关闭独立引擎；共享实例由 Beyond-CodeTab 释放 |
 
 词条可以是字符串或 `{ label, insertText?, detail?, boost? }`。注册 id 建议加插件前缀，languages 可用别名或 `"*"`。`config:` 为声明配置保留；内置项使用 `builtin:`，接入插件避免覆盖它们。
 

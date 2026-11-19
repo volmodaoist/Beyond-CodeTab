@@ -87,7 +87,7 @@ export class ExcalidrawFrameDeck extends Component {
       deck.frames = frames;
       return deck;
     } catch (error) {
-      console.warn("Code Tab: could not initialize Excalidraw Frame Deck", error);
+      console.warn("Beyond-CodeTab: could not initialize Excalidraw Frame Deck", error);
       return null;
     }
   }
@@ -283,7 +283,7 @@ export class ExcalidrawFrameDeck extends Component {
       if (incoming) {
         this.releasePage(incoming);
       }
-      console.warn("Code Tab: could not change Excalidraw frame", error);
+      console.warn("Beyond-CodeTab: could not change Excalidraw frame", error);
     } finally {
       this.moving = false;
       this.updateControls();
@@ -340,7 +340,7 @@ export class ExcalidrawFrameDeck extends Component {
       await this.replaceCurrent(buildExcalidrawFrameEmbed(this.embed, currentFrame.id));
       this.setCurrentFrame(currentFrame.id);
     } catch (error) {
-      console.warn("Code Tab: could not refresh Excalidraw frames", error);
+      console.warn("Beyond-CodeTab: could not refresh Excalidraw frames", error);
     }
   }
 }

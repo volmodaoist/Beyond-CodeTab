@@ -41,7 +41,7 @@ export async function renderTabPreview(
       } catch (error) {
         component.removeChild(deck);
         panel.empty();
-        console.warn("Code Tab: falling back from Excalidraw Frame Deck", error);
+        console.warn("Beyond-CodeTab: falling back from Excalidraw Frame Deck", error);
       }
     }
   }

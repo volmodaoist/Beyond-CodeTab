@@ -1,4 +1,4 @@
-# Code Tab 公开嵌入 API
+# Beyond-CodeTab 公开嵌入 API
 
 统一 API 已在当前工作树实现，尚未发布。简洁的参数、句柄和补全示例见 [src/openapi/api-doc.md](../src/openapi/api-doc.md)，类型以 `src/openapi/types.ts` 与构建产物 `dist/code-tab-api.d.ts` 为准。
 
@@ -33,7 +33,7 @@ RenderFailed 与 CommitFailed 分开：预览失败可能发生在宿主已经�
 
 ## 生命周期
 
-没有 onChange 时始终只读；只读保留切页，禁用编辑及标签管理。父 Component 卸载或 Code Tab 停用会释放句柄、预览、编辑器、监听与内部选择记录。dispose 重复调用安全，不保存草稿，清空内容但保留宿主容器。
+没有 onChange 时始终只读；只读保留切页，禁用编辑及标签管理。父 Component 卸载或 Beyond-CodeTab 停用会释放句柄、预览、编辑器、监听与内部选择记录。dispose 重复调用安全，不保存草稿，清空内容但保留宿主容器。
 
 原生 Markdown 处理器在切换或关闭视图时允许初始化被取消，Disposed 正常收尾，避免异步渲染产生未捕获异常；公开 api.render 仍拒绝 Disposed，让宿主丢弃迟到结果。其它渲染失败继续上抛。
 
@@ -45,6 +45,6 @@ Document 发现监听覆盖主窗口和新弹出窗口，并随关闭清理。�
 
 `src/openapi/render.ts` 管理容器所有权与生命周期，公开挂载及普通 Markdown 共用 `MultiTab/tabGroup.ts`。普通 Markdown 保存继续走 Vault 源码匹配路径；宿主保存只走回调。
 
-补全引擎独立位于 `src/core/completion/`，详见 [补全 Core](feat/code-completion-core.md)。共享引擎应由 Code Tab 释放，注册者只清理自己的规则。
+补全引擎独立位于 `src/core/completion/`，详见 [补全 Core](feat/code-completion-core.md)。共享引擎应由 Beyond-CodeTab 释放，注册者只清理自己的规则。
 
 执行 `npm run lint && npm test && npm run build`，真实回归为 `npm run test:obsidian`。接口和补全回归在 `tests/obsidian/openapi-completion.mjs`，包含初始化/卸载、写入冲突、CRLF、词表和设置恢复。导图实际保存与共享撤销需要在接入仓库继续验证，见 [导图迁移指南](mindmap-openapi-handoff.md)。

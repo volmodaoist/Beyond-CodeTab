@@ -2,7 +2,7 @@
 
 ## 1. 目标
 
-当 Code Tab 的一个标签正文仅包含一个 Excalidraw 嵌入，并且该画板包含两个及以上 Frame 时，将它自动渲染为可手动翻页的 Frame Deck：
+当 Beyond-CodeTab 的一个标签正文仅包含一个 Excalidraw 嵌入，并且该画板包含两个及以上 Frame 时，将它自动渲染为可手动翻页的 Frame Deck：
 
 ```text
 ┌──────────────────────────────────────────────┐
@@ -37,11 +37,11 @@ tab: 架构演进
 
 ### 2.1 Excalidraw 是稳定的可选依赖
 
-Code Tab 可以依赖 Excalidraw 的公开自动化能力，但不能让该依赖影响普通 Markdown、代码和其他第三方渲染器。运行时先做能力检测，任何环节不满足条件都回到现有预览路径。
+Beyond-CodeTab 可以依赖 Excalidraw 的公开自动化能力，但不能让该依赖影响普通 Markdown、代码和其他第三方渲染器。运行时先做能力检测，任何环节不满足条件都回到现有预览路径。
 
 ### 2.2 不解析画板存储格式
 
-Code Tab 不读取或解压 `json` / `compressed-json`，不实现 `lz-string`、Text Elements 同步、场景迁移、字体和嵌入文件恢复。
+Beyond-CodeTab 不读取或解压 `json` / `compressed-json`，不实现 `lz-string`、Text Elements 同步、场景迁移、字体和嵌入文件恢复。
 
 场景读取统一调用 ExcalidrawAutomate：
 
@@ -59,11 +59,11 @@ const scene = await ea.getSceneFromFile(file);
 ![[画板.excalidraw.md#^frame=<frame-id>]]
 ```
 
-Code Tab 仍通过 `MarkdownRenderer` 渲染这个 fragment。Excalidraw 可以在 DOM 内部使用 SVG 展示画板，但不会在 Vault 中生成需要用户维护的 `.svg` 文件。
+Beyond-CodeTab 仍通过 `MarkdownRenderer` 渲染这个 fragment。Excalidraw 可以在 DOM 内部使用 SVG 展示画板，但不会在 Vault 中生成需要用户维护的 `.svg` 文件。
 
 ### 2.4 不修改 Excalidraw 所有的 DOM
 
-翻页按钮由 Code Tab 创建并管理，视觉上放在 Excalidraw 源码按钮左侧，但不插入 Excalidraw 插件内部的工具栏。这样 Excalidraw 升级或重建嵌入节点时，不会销毁 Code Tab 的控制器。
+翻页按钮由 Beyond-CodeTab 创建并管理，视觉上放在 Excalidraw 源码按钮左侧，但不插入 Excalidraw 插件内部的工具栏。这样 Excalidraw 升级或重建嵌入节点时，不会销毁 Beyond-CodeTab 的控制器。
 
 ## 3. 自动识别规则
 
@@ -163,11 +163,11 @@ activeFrames: Map<string, string>
 - 当前 Frame 已删除：回退到不超过新长度的相邻页；
 - Frame 少于两个：当前预览退回普通单画板渲染。
 
-第一版在 Code Tab 自身重建预览时完成少于两个 Frame 的降级；已挂载组件只需安全刷新当前可用页。
+第一版在 Beyond-CodeTab 自身重建预览时完成少于两个 Frame 的降级；已挂载组件只需安全刷新当前可用页。
 
 ## 8. 控件与可访问性
 
-控件位于 Code Tab 面板右上角，并为 Excalidraw 原有控件预留空间：
+控件位于 Beyond-CodeTab 面板右上角，并为 Excalidraw 原有控件预留空间：
 
 - 最后一页点击下一页回到第一页；
 - 第一页点击上一页回到最后一页；
@@ -176,7 +176,7 @@ activeFrames: Map<string, string>
 - 按钮使用 Obsidian 图标 `chevron-left`、`chevron-right`；
 - 提供 `aria-label` 和原生 `title`；
 - 页码使用 `aria-live="polite"`；
-- 按钮点击不触发 Code Tab 的源码编辑。
+- 按钮点击不触发 Beyond-CodeTab 的源码编辑。
 
 ## 9. 降级策略
 
@@ -195,7 +195,7 @@ activeFrames: Map<string, string>
 
 ## 10. 维护边界
 
-- 存储格式与压缩算法属于 Excalidraw，不得在 Code Tab 中实现；
+- 存储格式与压缩算法属于 Excalidraw，不得在 Beyond-CodeTab 中实现；
 - 插件私有入口和版本兼容只进入 `excalidrawApi.ts`；
 - Frame 的解析、排序和 fragment 构造只进入 `excalidrawFrame.ts`；
 - 两页交接顺序、动画锁和 Component 释放保留在 `ExcalidrawFrameDeck`，不拆成事件总线；

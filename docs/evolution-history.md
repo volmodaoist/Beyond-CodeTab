@@ -1,4 +1,4 @@
-# Code Tab 演进记录
+# Beyond-CodeTab 演进记录
 
 本文只记录重要版本及其主要特性。实现细节和专题设计分别见同目录下的其他文档。
 
@@ -48,6 +48,8 @@
 - 按 `MultiTab`、`CodeBlockEditor` 和内容适配层拆分组件职责。
 
 ## 2.2.1 之后（未发布）
+
+- 对外品牌统一为 `Beyond-CodeTab`，维护者为 `volmodaoist`，清单补充作者主页，包信息补充项目、问题反馈与仓库链接。插件 ID `obsidian-code-tab`、`tab` Markdown 语法及现有 API 标识用于延续安装与接入。
 
 - 实现统一 `src/openapi/`：解析/序列化、挂载句柄、快照、外部同步、批量事务、选择/焦点、编辑控制、订阅与释放。类型声明随构建输出，使用说明见 [api-doc.md](../src/openapi/api-doc.md)。
 - 实现可复制的 `src/core/completion/`，内置八种热门语言词表，开放词表和规则注册/替换/清理及 JSON 设置。错误码采用独立枚举。

@@ -1,7 +1,7 @@
 {
-  "name": "obsidian-code-tab",
+  "name": "beyond-code-tab",
   "version": "2.2.1",
-  "description": "Render polished Markdown tab groups with inline content editing.",
+  "description": "Editable Markdown tabs with code completion and a public API.",
   "author": "volmodaoist",
   "main": "dist/main.js",
   "license": "MIT",
@@ -38,5 +38,13 @@
   "simple-git-hooks": {
     "pre-commit": "npm run lint",
     "commit-msg": "python3 .github/workflows/check-commit.py \"$1\""
+  },
+  "homepage": "https://github.com/volmodaoist/Beyond-CodeTab#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/volmodaoist/Beyond-CodeTab.git"
+  },
+  "bugs": {
+    "url": "https://github.com/volmodaoist/Beyond-CodeTab/issues"
   }
 }

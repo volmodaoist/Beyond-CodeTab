@@ -72,7 +72,7 @@ export class TabEditor extends Component {
     try {
       this.createNativeEditor();
     } catch (error) {
-      console.warn("Code Tab: native Markdown editor unavailable, using fallback", error);
+      console.warn("Beyond-CodeTab: native Markdown editor unavailable, using fallback", error);
       if (this.native) {
         this.removeChild(this.native);
       }

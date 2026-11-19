@@ -331,7 +331,7 @@ export function renderTabGroup(
         lastEditError = restoring
           ? new CodeTabError(CodeTabErrorCode.RenderFailed, "草稿已接受，预览恢复未完成", error)
           : error;
-        console.error("Code Tab: failed to save tab content", error);
+        console.error("Beyond-CodeTab: failed to save tab content", error);
         new Notice(error instanceof Error ? error.message : "标签内容保存失败", 5000);
         saving = false;
         return false;
@@ -431,7 +431,7 @@ export function renderTabGroup(
         return false;
       }
       plugin.activeTabs.set(group.id, previousIndex);
-      console.error("Code Tab: failed to change tab", error);
+      console.error("Beyond-CodeTab: failed to change tab", error);
       new Notice(error instanceof Error ? error.message : "标签修改失败", 5000);
       return false;
     } finally {
@@ -503,7 +503,7 @@ export function renderTabGroup(
         return false;
       }
       plugin.activeTabs.set(group.id, previousIndex);
-      console.error("Code Tab: failed to move tab", error);
+      console.error("Beyond-CodeTab: failed to move tab", error);
       new Notice(error instanceof Error ? error.message : "标签排序失败", 5000);
       return false;
     } finally {
@@ -596,13 +596,15 @@ export function renderTabGroup(
     if (initializing) {
       initialPreviews.push(rendered);
     } else {
-      void rendered.catch((error: unknown) => console.error("Code Tab: preview failed", error));
+      void rendered.catch((error: unknown) =>
+        console.error("Beyond-CodeTab: preview failed", error),
+      );
     }
     tabComponent.registerDomEvent(panel, "mousedown", (event) => {
       const target = event.target as Element | null;
       if (!readOnly && editingIndex < 0 && target && previewTargetStartsEditing(target)) {
         // 实时预览外层也是 CodeMirror。先截断 mousedown，避免宿主把整个 tab 围栏选中
-        // 或重建处理器，随后 click 才能稳定地交给当前 Code Tab。
+        // 或重建处理器，随后 click 才能稳定地交给当前 Beyond-CodeTab。
         event.stopPropagation();
       }
     });
@@ -672,7 +674,7 @@ export function renderTabGroup(
         return false;
       }
       plugin.activeTabs.set(group.id, previousIndex);
-      console.error("Code Tab: failed to add tab", error);
+      console.error("Beyond-CodeTab: failed to add tab", error);
       new Notice(error instanceof Error ? error.message : "新增标签失败", 5000);
     } finally {
       changingTabs = false;
@@ -736,7 +738,7 @@ export function renderTabGroup(
       try {
         listener(snapshot);
       } catch (error) {
-        console.error("Code Tab: state listener failed", error);
+        console.error("Beyond-CodeTab: state listener failed", error);
       }
     }
   }
@@ -745,7 +747,7 @@ export function renderTabGroup(
     try {
       host?.onEditingChange?.(editing);
     } catch (error) {
-      console.error("Code Tab: editing listener failed", error);
+      console.error("Beyond-CodeTab: editing listener failed", error);
     }
     notify();
   }

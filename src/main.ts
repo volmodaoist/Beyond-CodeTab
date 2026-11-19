@@ -20,7 +20,7 @@ const TAB_TEMPLATE = [
 ].join("\n");
 
 /**
- * Code Tab 的运行时分为两条路径：
+ * Beyond-CodeTab 的运行时分为两条路径：
  *
  * 1. 浏览时使用公开的 MarkdownRenderer，渲染轻、布局紧凑；
  * 2. 用户点击内容后，才临时创建 Obsidian 原生 Markdown embed editor。
@@ -55,7 +55,7 @@ export default class CodeTabPlugin extends Plugin {
       );
       completion.configure(this.completionConfiguration);
     } catch (error) {
-      console.error("Code Tab: invalid stored completion configuration", error);
+      console.error("Beyond-CodeTab: invalid stored completion configuration", error);
     }
     this.addSettingTab(new CompletionSettingsTab(this.app, this, completion));
     const runtime = createPluginApi(this, completion);

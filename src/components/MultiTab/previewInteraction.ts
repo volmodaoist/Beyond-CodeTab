@@ -3,7 +3,7 @@ export function previewTargetStartsEditing(target: Element): boolean {
   if (target.closest(".internal-embed, .excalidraw-svg, .excalidraw-embedded-img")) {
     return false;
   }
-  // Obsidian 附加在代码块上的源码按钮是例外：其仍然用于进入 Code Tab 编辑态。
+  // Obsidian 附加在代码块上的源码按钮是例外：其仍然用于进入 Beyond-CodeTab 编辑态。
   if (target.closest("pre button")) {
     return true;
   }

@@ -1,9 +1,9 @@
 {
   "id": "obsidian-code-tab",
-  "name": "Code Tab",
-  "description": "Render polished Markdown tab groups with inline content editing.",
+  "name": "Beyond-CodeTab",
+  "description": "Editable Markdown tabs with code completion and a public API.",
   "author": "volmodaoist",
-
   "minAppVersion": "0.11.0",
-  "version": "2.2.1"
+  "version": "2.2.1",
+  "authorUrl": "https://github.com/volmodaoist"
 }

@@ -1,4 +1,4 @@
-# Code Tab 原子 API 与扩展边界
+# Beyond-CodeTab 原子 API 与扩展边界
 
 状态：统一 API 已在当前工作树实现，尚未发布。路径为 `src/openapi/`。完整类型见 types.ts 与 `dist/code-tab-api.d.ts`；使用说明见 [简洁接口文档](../../src/openapi/api-doc.md)。
 
@@ -39,4 +39,4 @@
 
 原子能力可用于节点嵌入、教学、题目编辑、多语言片段和文档生成。稳定标签 ID、草稿导入导出、静态导出和能力细化可独立讨论，未作为当前 API 承诺。
 
-补全通过独立 `src/core/completion/` 开放词表与规则。纯文本候选查询不需要渲染 Code Tab，其他编辑器可以自行适配。
+补全通过独立 `src/core/completion/` 开放词表与规则。纯文本候选查询不需要渲染 Beyond-CodeTab，其他编辑器可以自行适配。
