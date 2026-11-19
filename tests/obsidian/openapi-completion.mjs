@@ -854,6 +854,8 @@ try {
     settingsPage.setDefaultTimeout(10000);
     if (settingsPage !== page) {
       settingsPage.on("pageerror", (error) => errors.push(error.message));
+      // CDP 的页面事件可能早于 Obsidian 完成 popout 赋值，先等宿主窗口就绪。
+      await page.waitForFunction(() => !!app.setting.popout?.win);
     }
     if (settingsPage !== page && process.env.CODE_TAB_SHOW_TEST_WINDOW !== "1") {
       await page.evaluate(() => {
