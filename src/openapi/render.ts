@@ -182,7 +182,16 @@ export function createPluginApi(
         source,
         sourcePath: context.sourcePath,
       };
-      await mount(options, context);
+      try {
+        await mount(options, context);
+      } catch (error) {
+        // 阅读视图切换/关闭可在异步预览完成前卸载父组件；这是宿主取消，
+        // 原生 Markdown 处理器正常收尾，公开 render 仍保留 Disposed 契约。
+        if (error instanceof CodeTabError && error.code === CodeTabErrorCode.Disposed) {
+          return;
+        }
+        throw error;
+      }
     },
   };
   return runtime;

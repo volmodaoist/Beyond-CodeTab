@@ -35,6 +35,8 @@ RenderFailed 与 CommitFailed 分开：预览失败可能发生在宿主已经�
 
 没有 onChange 时始终只读；只读保留切页，禁用编辑及标签管理。父 Component 卸载或 Code Tab 停用会释放句柄、预览、编辑器、监听与内部选择记录。dispose 重复调用安全，不保存草稿，清空内容但保留宿主容器。
 
+原生 Markdown 处理器在切换或关闭视图时允许初始化被取消，Disposed 正常收尾，避免异步渲染产生未捕获异常；公开 api.render 仍拒绝 Disposed，让宿主丢弃迟到结果。其它渲染失败继续上抛。
+
 宿主节点关闭前显式选择 commit 或 cancel。节点重排移动同一 DOM 容器，不复制 innerHTML。保存或预览迟到后不能修改已关闭节点或复用容器上的新实例。插件重新启用后重新发现 API 并挂载。
 
 Document 发现监听覆盖主窗口和新弹出窗口，并随关闭清理。声明文件仅提供类型，运行时枚举通过 api.errorCodes / api.completion.errorCodes 取得。
