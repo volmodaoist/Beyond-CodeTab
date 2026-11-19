@@ -2,6 +2,13 @@
 
 本文只记录重要版本及其主要特性。实现细节和专题设计分别见同目录下的其他文档。
 
+## 仓库迁移（2026-11-19）
+
+- GitHub 仓库迁移至 [volmodaoist/Beyond-CodeTab](https://github.com/volmodaoist/Beyond-CodeTab)，`origin` 使用 `git@github-zizi:volmodaoist/Beyond-CodeTab.git`。
+- 目标仓库承接 Code Tab 的原有开发历史。修正此前误关联到 Oh-My-Immersive 的操作，移除误接入的 Immersive Folder 合并历史，并保留图片清理、提交检查及发布工作流。
+- Code Tab 的源码、插件标识 `obsidian-code-tab`、版本 `2.2.1` 和原有版本标签继续保留；原有功能提交没有重写，文档中的提交引用仍然有效。
+- 发布工作流使用 `dist/` 中的构建产物，产物来源验证示例指向 Beyond-CodeTab 仓库。
+
 ## Git Tag 现状
 
 - 当前 `manifest.json` 版本为 `2.2.1`。轻量 tag `2.2.1` 固定指向提交 `86d6385`，作为交互与布局修复完成后的稳定基线；后续维护性重构位于该 tag 之后，不移动基线。
