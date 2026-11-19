@@ -7,10 +7,13 @@
 - 浏览时不为每个标签常驻一个完整 Markdown 编辑器，减少多余留白和复杂控件。
 - 编辑时按需使用 Obsidian 原生 Markdown 编辑器，代码正文与预览共用高亮规则。
 
+当前工作树已实现统一 [OpenAPI 使用说明](src/openapi/api-doc.md) 和 [独立代码补全 Core](docs/feat/code-completion-core.md)，尚未发布。导图插件接入见 [迁移交接指南](docs/mindmap-openapi-handoff.md)。
+
 ## 功能特点
 
 - **可选宿主集成**：提供[宿主渲染接口](docs/host-rendering.md)，可将活动标签组挂入 MindMap Studio 等应用。宿主模式的编辑和标签管理由应用保存回调接管；只读模式保留切页。普通 Markdown 使用方式保持原样。
 
+- 支持 Java、C/C++、Python、JS/TS、Go、Shell 词表补全，允许通过设置页 JSON 或公开 API 添加词表和规则。
 - 支持任意数量的标签。
 - 标签栏末尾的 `+` 可直接新增并选中一个空代码标签。
 - 双击标签标题可原地重命名，Enter 或失焦保存，Esc 取消。
@@ -352,7 +355,7 @@ Code Tab 使用外层 fenced code block 注册 `tab` 处理器，块内每条 `t
 | `npm run lint:fix`      | 自动修复 lint 与格式问题              | 用 ESLint 和 Prettier 统一多行风格                                   |
 | `npm test`              | 运行解析和文件回写回归测试            | 在终端显示测试结果，不打开界面                                       |
 | `npm run test:obsidian` | 在本机 Obsidian 中自动运行交互回归    | 启动独立临时仓库，检查布局、输入及文件回写，输出截图和报告目录       |
-| `npm run build`         | 检查类型并生成插件安装文件            | 生成 `dist/main.js`、`dist/manifest.json` 和 `dist/styles.css` |
+| `npm run build`         | 检查类型并生成插件安装文件            | 生成插件安装文件及 `dist/code-tab-api.d.ts` 类型声明 |
 
 首次开始开发：
 

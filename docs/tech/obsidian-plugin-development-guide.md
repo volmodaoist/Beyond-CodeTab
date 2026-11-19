@@ -483,7 +483,7 @@ npm run lint && npm test && npm run build
 npm run test:obsidian
 ```
 
-它会先构建，再启动五组真实宿主回归，覆盖代码编辑、标签控件、Markdown 与嵌入、表格逐帧切换、标签改名和删除。每组使用独立临时 Vault，默认隐藏测试窗口，结束时关闭测试进程，保留截图、日志和 `report.json`。运行命令及可选 Excalidraw 配置见 [tests/test-guide.md](../../tests/test-guide.md)。
+它会先构建，再启动六组真实宿主回归，覆盖代码编辑、标签控件、Markdown 与嵌入、表格逐帧切换、标签改名和删除，以及公开 API、补全和设置恢复。每组使用独立临时 Vault，默认隐藏测试窗口，结束时关闭测试进程，保留截图、日志和 `report.json`。运行命令及可选 Excalidraw 配置见 [tests/test-guide.md](../../tests/test-guide.md)。
 
 自动化定位使用 `data-testid`，例如先选中可见的 `code-tab-group`，再查找其内部的 `code-tab-tab`、`code-tab-panel`、`code-tab-language`。同页可以有多个标签组，所以不要将这些值当作全局唯一 DOM ID。
 

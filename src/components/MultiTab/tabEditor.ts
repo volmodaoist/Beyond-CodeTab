@@ -3,18 +3,24 @@ import type { App } from "obsidian";
 import { Compartment, EditorSelection, StateEffect } from "@codemirror/state";
 import type { Extension, TransactionSpec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { closeCompletion, completionStatus } from "@codemirror/autocomplete";
 import type {
   AppWithEmbedRegistry,
   MarkdownEmbedContext,
   MarkdownEmbedOptions,
   NativeMarkdownEmbed,
 } from "./types";
-import { codeBlockEditorExtensions } from "../CodeBlockEditor";
+import {
+  codeBlockEditorExtensions,
+  codeCompletionExtensions,
+  isCodeCompletionInteraction,
+} from "../CodeBlockEditor";
 import type { CodeHighlighting } from "../CodeBlockEditor";
 import { RenderTypeInput } from "./renderTypeInput";
 import { readTabContent, writeTabContent } from "./tabContent";
 import type { TabContent } from "./tabContent";
 import { loadCodeHighlighting } from "./tabPreview";
+import type { CompletionEngine } from "../../core/completion";
 
 export interface TabEditorOptions {
   app: App;
@@ -27,6 +33,7 @@ export interface TabEditorOptions {
   addButton: HTMLElement;
   onSave: () => void;
   onCancel: () => void;
+  completion?: CompletionEngine;
 }
 
 /**
@@ -37,11 +44,13 @@ export class TabEditor extends Component {
   private readonly content: TabContent;
   private readonly host: HTMLDivElement;
   private readonly highlightingSlot = new Compartment();
+  private readonly completionSlot = new Compartment();
   private native: NativeMarkdownEmbed | null = null;
   private fallback: HTMLTextAreaElement | null = null;
   private typeInput: RenderTypeInput | null = null;
   private highlighting: CodeHighlighting | null;
   private disposed = false;
+  private initialFocusPending = true;
   private pointerX: number;
   private pointerY: number;
   private pointerOutsideSaveArea = false;
@@ -86,14 +95,19 @@ export class TabEditor extends Component {
       }
     });
     this.registerInputEvents();
-    window.requestAnimationFrame(() => {
+    this.options.panel.ownerDocument.defaultView?.requestAnimationFrame(() => {
       if (this.disposed) {
         return;
       }
-      // 用户可能在初始化的这一帧已点入类型框，不能再把焦点抢回正文。
-      if (this.options.panel.ownerDocument.activeElement !== this.typeInput?.input) {
+      // 初始化后已发生键盘输入或用户点击时，不再覆盖用户的新光标位置。
+      // 类型框同样保留焦点，避免这一帧把焦点抢回正文。
+      if (
+        this.initialFocusPending &&
+        this.options.panel.ownerDocument.activeElement !== this.typeInput?.input
+      ) {
         this.focusAtInitialClick();
       }
+      this.initialFocusPending = false;
       this.options.panel.classList.remove("is-restoring");
       this.options.panel.style.removeProperty("--code-tab-restore-height");
     });
@@ -123,6 +137,7 @@ export class TabEditor extends Component {
   }
 
   focus() {
+    this.initialFocusPending = false;
     if (this.native?.editor) {
       this.native.editor.focus();
     } else {
@@ -218,6 +233,7 @@ export class TabEditor extends Component {
       extensions.push(...codeBlockEditorExtensions());
     }
     extensions.push(this.highlightingSlot.of(this.highlighting?.extension ?? []));
+    extensions.push(this.completionSlot.of(this.createCompletionExtensions()));
     const transaction: TransactionSpec = {
       effects: StateEffect.appendConfig.of(extensions),
       selection:
@@ -264,6 +280,17 @@ export class TabEditor extends Component {
     }
   }
 
+  private createCompletionExtensions(): Extension[] {
+    if (!this.options.completion) {
+      return [];
+    }
+    const language =
+      this.content.kind === "code"
+        ? () => this.typeInput?.value ?? this.content.renderType
+        : undefined;
+    return codeCompletionExtensions(this.options.completion, language);
+  }
+
   private async updateHighlighting(renderType: string) {
     // Markdown 继续使用宿主的实时预览；类型变化在保存时转换格式。
     if (this.content.kind !== "code") {
@@ -279,12 +306,18 @@ export class TabEditor extends Component {
     this.highlighting = highlighting;
     this.setHighlightingClass();
     const transaction: TransactionSpec = {
-      effects: this.highlightingSlot.reconfigure(highlighting.extension),
+      effects: [
+        this.highlightingSlot.reconfigure(highlighting.extension),
+        this.completionSlot.reconfigure(this.createCompletionExtensions()),
+      ],
     };
     this.native?.editor?.cm?.dispatch(transaction);
   }
 
   private registerInputEvents() {
+    this.registerDomEvent(this.host, "mousedown", () => {
+      this.initialFocusPending = false;
+    });
     const panel = this.options.panel;
     const editorWindow = panel.ownerDocument.defaultView;
     const pastePlainCode = (event: ClipboardEvent) => {
@@ -314,14 +347,27 @@ export class TabEditor extends Component {
     this.register(() => this.host.removeEventListener("paste", pastePlainCode, true));
 
     const keydown = (event: KeyboardEvent) => {
+      if (event.isComposing) {
+        return;
+      }
       if (!event.composedPath().includes(panel)) {
         return;
       }
+      this.initialFocusPending = false;
       if (event.key !== "Escape" && !(event.key === "Enter" && (event.metaKey || event.ctrlKey))) {
         return;
       }
       event.preventDefault();
       event.stopPropagation();
+      const view = this.native?.editor?.cm;
+      const status = view ? completionStatus(view.state) : null;
+      if (view && status !== null) {
+        closeCompletion(view);
+        // 只在候选已经展示时先关闭弹窗；等待中的空候选请求不应吞掉取消编辑。
+        if (event.key === "Escape" && status === "active") {
+          return;
+        }
+      }
       if (event.key === "Escape") {
         this.options.onCancel();
       } else {
@@ -337,7 +383,10 @@ export class TabEditor extends Component {
       this.pointerY = event.clientY;
       const path = event.composedPath();
       // 布局变化不算主动移出；移向 + 时由新增动作按顺序保存当前编辑。
-      const outsideSaveArea = !path.includes(panel) && !path.includes(this.options.addButton);
+      const view = this.native?.editor?.cm;
+      const inCompletion = view ? isCodeCompletionInteraction(view, event.target) : false;
+      const outsideSaveArea =
+        !path.includes(panel) && !path.includes(this.options.addButton) && !inCompletion;
       if (!outsideSaveArea) {
         // 只有重新进入编辑区后再次移出，才开始下一次自动保存尝试。保存失败时鼠标
         // 往往仍在面板外，不能让每一个 mousemove 都重复写文件并创建一条 Notice。

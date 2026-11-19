@@ -1,4 +1,4 @@
-import { copyFile, mkdir } from "node:fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
 
@@ -11,7 +11,7 @@ const options = {
   outdir: "dist",
   bundle: true,
   // 与 Obsidian 共享 CodeMirror 实例，避免重复打包后扩展对象无法被宿主识别。
-  external: ["obsidian", "@codemirror/state", "@codemirror/view"],
+  external: ["obsidian", "@codemirror/state", "@codemirror/view", "@codemirror/autocomplete"],
   format: "cjs",
   platform: "browser",
   target: "es2019",
@@ -39,6 +39,24 @@ const options = {
           await mkdir(new URL("dist/", import.meta.url), {
             recursive: true,
           });
+          const sources = await Promise.all([
+            readFile(new URL("src/openapi/types.ts", import.meta.url), "utf8"),
+            readFile(new URL("src/core/completion/types.ts", import.meta.url), "utf8"),
+            readFile(new URL("src/openapi/errors.ts", import.meta.url), "utf8"),
+            readFile(new URL("src/core/completion/errors.ts", import.meta.url), "utf8"),
+          ]);
+          const types = sources
+            .slice(0, 2)
+            .map((text) =>
+              text.replace(/^import type .*?;\n/gm, (line) =>
+                line.includes('"obsidian"') ? line : "",
+              ),
+            );
+          const enums = sources.slice(2).map((text) => text.slice(0, text.indexOf("export class")));
+          await writeFile(
+            new URL("dist/code-tab-api.d.ts", import.meta.url),
+            [...types, ...enums].join("\n"),
+          );
           await Promise.all([
             copyFile(
               new URL("manifest.json", import.meta.url),

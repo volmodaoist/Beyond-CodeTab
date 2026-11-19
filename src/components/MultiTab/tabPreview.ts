@@ -16,18 +16,23 @@ export async function renderTabPreview(
   sourcePath: string,
   source: string,
   stateKeyPrefix: string,
+  isCurrent: () => boolean = () => true,
 ): Promise<CodeHighlighting | null> {
   const app: App = plugin.app;
   const content = readTabContent(source);
   if (content.kind === "markdown") {
-    const deck = await ExcalidrawFrameDeck.create({
+    const deckOptions: Parameters<typeof ExcalidrawFrameDeck.create>[0] = {
       app,
       panel,
       sourcePath,
       source: content.editorSource,
       stateKeyPrefix,
       activeFrames: plugin.activeFrames,
-    });
+    };
+    const deck = await ExcalidrawFrameDeck.create(deckOptions);
+    if (!isCurrent()) {
+      return null;
+    }
     if (deck) {
       component.addChild(deck);
       try {
@@ -45,6 +50,9 @@ export async function renderTabPreview(
   // 这里只转换交给预览器的副本，用户源文件中的 c++、c# 等写法保持不变。
   const previewSource = normalizePreviewFenceLanguages(content.editorSource);
   await MarkdownRenderer.render(app, previewSource, panel, sourcePath, component);
+  if (!isCurrent()) {
+    return null;
+  }
   if (content.kind !== "code") {
     const prism: typeof Prism = await loadPrism();
     return mixedCodeHighlighting(prism);
