@@ -34,6 +34,20 @@ npm run build
 
 显示名称是 `Beyond-CodeTab`，插件 ID 和安装目录仍为 `obsidian-code-tab`，用于延续原有安装与快捷键。构建还生成 `dist/code-tab-api.d.ts` 供接入开发使用，它不是插件运行所必需的安装文件。
 
+### Make 快捷命令
+
+在仓库根目录运行 `make` 查看帮助。常用入口：
+
+```bash
+make build                   # 类型检查并构建
+make check                   # 核心测试、构建和 lint
+make lint-fix                # 自动修复代码风格
+make test-obsidian           # 真实 Obsidian 回归
+make install vault="/你的/Vault 路径"
+```
+
+安装命令通过 `vault="..."` 指定目标 Vault，会在缺少构建依赖时自动运行 `npm ci`，并构建当前源码；只替换三个运行文件，保留插件配置。旧安装文件备份到 `~/.beyond-code-tab/backups/`。安装后关闭再启用插件，让 Obsidian 加载新构建。
+
 ## 快速开始
 
 ### 普通 Markdown 标签
