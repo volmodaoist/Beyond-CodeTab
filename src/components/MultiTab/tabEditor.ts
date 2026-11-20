@@ -13,6 +13,7 @@ import type {
 import {
   codeBlockEditorExtensions,
   codeCompletionExtensions,
+  fencePairingExtension,
   isCodeCompletionInteraction,
 } from "../CodeBlockEditor";
 import type { CodeHighlighting } from "../CodeBlockEditor";
@@ -31,6 +32,7 @@ export interface TabEditorOptions {
   click: MouseEvent;
   initialSelection: number | null;
   addButton: HTMLElement;
+  toolbar: HTMLElement;
   onSave: () => void;
   onCancel: () => void;
   completion?: CompletionEngine;
@@ -224,6 +226,9 @@ export class TabEditor extends Component {
       return attributes;
     };
     const extensions: Extension[] = [EditorView.editorAttributes.of(editorAttributes)];
+    if (this.content.kind === "markdown") {
+      extensions.push(fencePairingExtension());
+    }
     view.scrollDOM.classList.add("code-tab__cm-scroller");
     view.contentDOM.classList.add("code-tab__cm-content");
     view.contentDOM.parentElement?.classList.add("code-tab__cm-container");
@@ -242,6 +247,11 @@ export class TabEditor extends Component {
           : undefined,
     };
     view.dispatch(transaction);
+    // Component 先卸载后加入的子组件；在宿主编辑器释放状态前取消待启动的补全查询。
+    const completionCleanup = this.native.addChild(new Component());
+    completionCleanup.register(() => {
+      closeCompletion(view);
+    });
   }
 
   private createFallbackEditor() {
@@ -350,7 +360,10 @@ export class TabEditor extends Component {
       if (event.isComposing) {
         return;
       }
-      if (!event.composedPath().includes(panel)) {
+      if (
+        !event.composedPath().includes(panel) &&
+        !event.composedPath().includes(this.options.toolbar)
+      ) {
         return;
       }
       this.initialFocusPending = false;
@@ -386,7 +399,10 @@ export class TabEditor extends Component {
       const view = this.native?.editor?.cm;
       const inCompletion = view ? isCodeCompletionInteraction(view, event.target) : false;
       const outsideSaveArea =
-        !path.includes(panel) && !path.includes(this.options.addButton) && !inCompletion;
+        !path.includes(panel) &&
+        !path.includes(this.options.addButton) &&
+        !path.includes(this.options.toolbar) &&
+        !inCompletion;
       if (!outsideSaveArea) {
         // 只有重新进入编辑区后再次移出，才开始下一次自动保存尝试。保存失败时鼠标
         // 往往仍在面板外，不能让每一个 mousemove 都重复写文件并创建一条 Notice。

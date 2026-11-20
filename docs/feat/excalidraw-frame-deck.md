@@ -152,7 +152,7 @@ src/components/MultiTab/
 插件内增加内存状态：
 
 ```ts
-activeFrames: Map<string, string>
+activeFrames: Map<string, string>;
 ```
 
 键由标签组 ID、标签索引和 Excalidraw 文件路径组成，值为当前 Frame ID。它不写入用户 Markdown，重启 Obsidian 后自然回到第一页。

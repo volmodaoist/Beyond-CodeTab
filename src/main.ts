@@ -6,6 +6,9 @@ import type { CodeTabApi } from "./openapi";
 import { createCompletionEngine, parseCompletionConfiguration } from "./core/completion";
 import type { CompletionConfiguration, CompletionEngine } from "./core/completion";
 import { CompletionSettingsTab, emptyCompletionConfiguration } from "./completionSettings";
+import { fencePairingExtension } from "./components/CodeBlockEditor";
+import { registerTabReferenceNavigation } from "./tabReferenceNavigation";
+import type { TabGroupController } from "./components/MultiTab";
 
 // 外层默认使用四个反引号，内部便可直接放常见的三个反引号代码块。
 const TAB_FENCE = String.fromCharCode(96).repeat(4);
@@ -38,8 +41,11 @@ export default class CodeTabPlugin extends Plugin {
   activeTabs = new Map<string, number>();
   // key 同时包含 tab 块、标签序号和画板路径；value 始终使用稳定的 Frame ID。
   activeFrames = new Map<string, string>();
+  referenceTargets = new Map<string, Set<TabGroupController>>();
 
   async onload() {
+    this.registerEditorExtension(fencePairingExtension());
+    registerTabReferenceNavigation(this);
     this.activeTabs.clear();
     this.activeFrames.clear();
     const completion = createCompletionEngine();
@@ -83,6 +89,7 @@ export default class CodeTabPlugin extends Plugin {
   onunload() {
     this.activeTabs.clear();
     this.activeFrames.clear();
+    this.referenceTargets.clear();
   }
 
   async saveCompletionConfiguration(configuration: CompletionConfiguration): Promise<void> {

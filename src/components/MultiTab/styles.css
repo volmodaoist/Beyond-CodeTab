@@ -263,3 +263,74 @@
     --code-tab-panel-padding: 0.85rem;
   }
 }
+
+/* 工具栏固定在右侧，标签过多时只滚动标签列表。 */
+.code-tab__header {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+
+.code-tab__header[hidden] {
+  display: none;
+}
+
+.code-tab__header > .code-tab__list {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-bottom: 0;
+}
+
+.code-tab__tools {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 0.15rem;
+  padding-inline: 0.3rem;
+}
+
+.code-tab__tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0 !important;
+  border-radius: 4px;
+  box-shadow: none !important;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.code-tab__tool:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.code-tab__tool:focus-visible {
+  outline: 2px solid var(--background-modifier-border-focus);
+  outline-offset: -2px;
+}
+
+.code-tab__tool .svg-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* 当前标签编辑按钮接管自身 tab 围栏，其他代码块的原生按钮不受影响。 */
+.cm-preview-code-block:has(.code-tab) > .edit-block-button {
+  display: none;
+}
+
+.code-tab__tool[hidden] {
+  display: none;
+}
+
+.cm-embed-block:has(.code-tab) > .embed-actions > .edit-block-button {
+  display: none;
+}

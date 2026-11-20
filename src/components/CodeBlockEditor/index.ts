@@ -1,4 +1,5 @@
 export { codeBlockEditorExtensions, findCodeBlockBody } from "./fences";
+export { fencePairingExtension } from "./fencePairing";
 export type { CodeBlockBody } from "./fences";
 export { codeHighlighting, mixedCodeHighlighting } from "./highlighting";
 export type { CodeHighlighting } from "./highlighting";

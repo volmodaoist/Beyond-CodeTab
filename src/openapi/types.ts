@@ -3,6 +3,7 @@ import type { CompletionEngine } from "../core/completion";
 import type { CodeTabErrorCode } from "./errors";
 
 export interface CodeTabData {
+  readonly id?: string;
   readonly title: string;
   readonly content: string;
 }

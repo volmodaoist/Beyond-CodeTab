@@ -105,10 +105,16 @@ export function parseTabs(source: string): TabData[] {
     // [bg, i) 恰好覆盖当前标签的完整正文，含内层围栏，不含下一条标签声明。
     // 只裁掉正文首尾的空行，内部空行与缩进保持原样；content 的类型是字符串。
     const contentLines = lines.slice(bg, i);
+    const inlineIdentity = tabMatch[1].match(/^(?:(.*?)\s+)?\^([a-zA-Z0-9-]+)$/);
     const tab: TabData = {
-      title: tabMatch[1] || "标签" + (tabs.length + 1),
+      title:
+        (inlineIdentity ? (inlineIdentity[1] ?? "").trimEnd() : tabMatch[1]) ||
+        "标签" + (tabs.length + 1),
       content: trimBlankLines(contentLines).join("\n"),
     };
+    if (inlineIdentity) {
+      tab.id = inlineIdentity[2];
+    }
 
     tabs.push(tab);
   }
@@ -159,7 +165,8 @@ export function serializeTabs(tabs: TabData[]): string {
   return tabs
     .map((tab) => {
       const header = "tab: " + tab.title;
-      return tab.content ? header + "\n" + tab.content : header;
+      const identity = tab.id ? " ^" + tab.id : "";
+      return tab.content ? header + identity + "\n" + tab.content : header + identity;
     })
     .join("\n\n");
 }
@@ -196,7 +203,8 @@ export async function updateMarkdownSource(
         nextSource === null
           ? ""
           : createTabFence(nextSource, block.marker, block.indent, block.newline);
-      return fileContent.slice(0, block.start) + replacement + fileContent.slice(block.end);
+      const end = nextSource === null ? (block.referenceEnd ?? block.end) : block.end;
+      return fileContent.slice(0, block.start) + replacement + fileContent.slice(end);
     };
 
     if (typeof app.vault.process === "function") {
@@ -274,6 +282,13 @@ export function findTabBlock(
           indent: opening[1],
           newline,
         };
+        const reference = fileContent
+          .slice(endOffset)
+          .match(/^\r?\n\^([a-zA-Z0-9-]+)[ \t]*(?=\r?\n|$)/);
+        if (reference) {
+          block.referenceId = reference[1];
+          block.referenceEnd = endOffset + reference[0].length;
+        }
 
         matches.push(block);
       }

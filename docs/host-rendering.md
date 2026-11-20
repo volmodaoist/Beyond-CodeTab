@@ -1,6 +1,6 @@
 # Beyond-CodeTab 公开嵌入 API
 
-统一 API 已在当前工作树实现，尚未发布。简洁的参数、句柄和补全示例见 [src/openapi/api-doc.md](../src/openapi/api-doc.md)，类型以 `src/openapi/types.ts` 与构建产物 `dist/code-tab-api.d.ts` 为准。
+统一 API 已合入当前 `main`，新增能力尚未发布新 tag。简洁的参数、句柄和补全示例见 [src/openapi/api-doc.md](../src/openapi/api-doc.md)，类型以 `src/openapi/types.ts` 与构建产物 `dist/code-tab-api.d.ts` 为准。
 
 ## 挂载和源码
 
@@ -25,7 +25,7 @@ revision 只随已接受 source 改变；选择和交互状态不增加版本。
 
 apply 接收顺序操作批次，后续索引基于前一步结果；move-tab 的 toIndex 是最终位置。先校验全部操作和 expectedRevision，再调用一次 onChange。无效、空批次及无源码变化的批次不保存。
 
-删除最后一页提交 null，句柄保留空组及原容器；宿主决定移除节点或后续插入。标题可以重复，不适合作为稳定数据键。
+删除最后一页提交 null，句柄保留空组及原容器；宿主决定移除节点或后续插入。标题可以重复，不适合作为稳定数据键。生成引用的标签带可选 id，在 `tab: 标题 ^id` 的标题行末尾持久化；替换正文或移动标签保留该身份。
 
 同值 update 不重建，交互中也可无操作返回。变更 source/sourcePath/readOnly 时，Busy 保留输入，由宿主保留最新待同步值并在交互结束后重试。不要同步递归订阅更新。
 
@@ -41,10 +41,18 @@ RenderFailed 与 CommitFailed 分开：预览失败可能发生在宿主已经�
 
 Document 发现监听覆盖主窗口和新弹出窗口，并随关闭清理。声明文件仅提供类型，运行时枚举通过 api.errorCodes / api.completion.errorCodes 取得。
 
+## 标签引用
+
+笔记中的引用按钮将组 ID 写成原生块锚点，将稳定 tab ID 写在标题行末尾。新 ID 使用组六位加标签六位格式。专用 `obsidian://beyond-code-tab?block=...&tab=...` 协议在当前 Vault 按原生块缓存查找笔记，再定位组并选择标签；链接不携带文件路径或 Vault 名，笔记移动或改名后仍可用。普通内部链接、块链接与嵌入仍走 Obsidian 的原有路径。笔记中的 `</>` 按钮打开整个标签组的原生源码；第三方宿主提供复制和点击正文编辑，不提供原生笔记源码按钮或引用按钮，避免越过其 onChange 存储边界。
+
+专用跳转不指定 `mode` 或 `source`，保留目标 MarkdownView 的现有模式；已有目标标签页优先复用。实时预览的光标定位到围栏外的组锚点行，滚动定位到围栏起点，避免原生块高亮将光标移进围栏而展开源码。源码模式将光标定位到围栏起点。
+
+链接使用笔记路径和 Vault 名称，重命名这些字段后需要重新生成；标签标题和排序变化不需要重新生成。
+
 ## 实现与验证
 
 `src/openapi/render.ts` 管理容器所有权与生命周期，公开挂载及普通 Markdown 共用 `MultiTab/tabGroup.ts`。普通 Markdown 保存继续走 Vault 源码匹配路径；宿主保存只走回调。
 
 补全引擎独立位于 `src/core/completion/`，详见 [补全 Core](feat/code-completion-core.md)。共享引擎应由 Beyond-CodeTab 释放，注册者只清理自己的规则。
 
-执行 `npm run lint && npm test && npm run build`，真实回归为 `npm run test:obsidian`。接口和补全回归在 `tests/obsidian/openapi-completion.mjs`，包含初始化/卸载、写入冲突、CRLF、词表和设置恢复。导图实际保存与共享撤销需要在接入仓库继续验证，见 [导图迁移指南](mindmap-openapi-handoff.md)。
+执行 `npm run lint && npm test && npm run build`，真实回归为 `npm run test:obsidian`。接口和补全回归在 `tests/obsidian/openapi-completion.mjs`，包含初始化/卸载、写入冲突、CRLF、词表和设置恢复。导图实际保存与共享撤销需要在接入仓库继续验证，可按本文的保存与生命周期契约实现。

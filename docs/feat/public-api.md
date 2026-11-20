@@ -1,19 +1,19 @@
 # Beyond-CodeTab 原子 API 与扩展边界
 
-状态：统一 API 已在当前工作树实现，尚未发布。路径为 `src/openapi/`。完整类型见 types.ts 与 `dist/code-tab-api.d.ts`；使用说明见 [简洁接口文档](../../src/openapi/api-doc.md)。
+状态：统一 API 已合入当前 `main`，新增能力尚未发布新 tag。路径为 `src/openapi/`。完整类型见 types.ts 与 `dist/code-tab-api.d.ts`；使用说明见 [简洁接口文档](../../src/openapi/api-doc.md)。
 
 ## 原子能力
 
-| 边界 | 责任 |
-| --- | --- |
-| 数据 | parse/serialize 处理不含外层围栏的块体，数据为 title/content |
-| 宿主同步 | update 接受宿主已经确定的数据，不回声保存 |
-| 用户变更 | apply 与界面编辑统一走 onChange，由宿主接受事务 |
-| 内容版本 | revision 表示已接受内容，批次必须传 expectedRevision |
-| 视图状态 | 选择、焦点、编辑和订阅独立于内容版本 |
-| 生命周期 | 父 Component、容器所有权、dispose 和迟到结果保护 |
+| 边界     | 责任                                                         |
+| -------- | ------------------------------------------------------------ |
+| 数据     | parse/serialize 处理不含外层围栏的块体，数据为 title/content |
+| 宿主同步 | update 接受宿主已经确定的数据，不回声保存                    |
+| 用户变更 | apply 与界面编辑统一走 onChange，由宿主接受事务              |
+| 内容版本 | revision 表示已接受内容，批次必须传 expectedRevision         |
+| 视图状态 | 选择、焦点、编辑和订阅独立于内容版本                         |
+| 生命周期 | 父 Component、容器所有权、dispose 和迟到结果保护             |
 
-标签以索引配合 revision 定位。标题是展示字段，允许重名；稳定标签 ID 及其 Markdown 映射尚未实现。
+标签以索引配合 revision 定位。标题是展示字段，允许重名；生成引用后，标签通过可选 `id` 保存稳定身份，映射为标题行末尾的 `^id`；已有无 ID 标签继续按原格式解析。
 
 ## 保存与事务取舍
 
@@ -33,10 +33,10 @@
 - `discovery.ts`：Document 能力发现。
 - `MultiTab/tabGroup.ts`：标签数据、编辑会话和提交控制。
 
-用户已明确允许破坏性重构，不分 v1/v2，不保留旧渲染请求适配。使用 obsidian-code-tab-api 发现，没有版本字段。此次实现不移动稳定 tag 或发布新版本。
+采用统一接口，旧渲染请求适配已移除。通过 `obsidian-code-tab-api` 发现 API，协议没有版本字段；发布版本与稳定 tag 见[演进记录](../evolution-history.md)。
 
 ## 后续扩展
 
-原子能力可用于节点嵌入、教学、题目编辑、多语言片段和文档生成。稳定标签 ID、草稿导入导出、静态导出和能力细化可独立讨论，未作为当前 API 承诺。
+原子能力可用于节点嵌入、教学、题目编辑、多语言片段和文档生成。草稿导入导出、静态导出和能力细化可独立讨论，未作为当前 API 承诺。
 
 补全通过独立 `src/core/completion/` 开放词表与规则。纯文本候选查询不需要渲染 Beyond-CodeTab，其他编辑器可以自行适配。

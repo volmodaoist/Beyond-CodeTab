@@ -10,7 +10,7 @@
 npm ci
 npm run lint                # 代码规则与格式检查（提交时也自动运行）
 npm test                    # 解析、回写、围栏、高亮、OpenAPI 操作和补全 Core 测试
-npm run test:obsidian        # 先构建，再运行六组真实 Obsidian 界面测试
+npm run test:obsidian        # 先构建，再运行七组真实 Obsidian 界面测试
 ```
 
 默认隐藏独立测试窗口。需要观察点击、输入和切换用例的过程时：
@@ -34,6 +34,8 @@ node tests/obsidian/table-transition.mjs
 node tests/obsidian/tab-actions.mjs
 # 或运行公开接口、代码补全及设置恢复测试
 node tests/obsidian/openapi-completion.mjs
+# 或运行围栏配对、工具栏及稳定引用测试
+node tests/obsidian/fence-toolbar-reference.mjs
 ```
 
 如果本机已有 Excalidraw，可把插件目录传给测试，验证真实画布嵌入：
@@ -57,9 +59,10 @@ CODE_TAB_EXCALIDRAW_PLUGIN='/你的仓库/.obsidian/plugins/obsidian-excalidraw-
 | [obsidian/tab-actions.mjs](obsidian/tab-actions.mjs) | 原地重命名、确认删除、取消、最后一页、删除后的索引、冲突及重复确认 |
 | [fixtures/table.md](fixtures/table.md) | 中文长文本与行内代码混合的表格，用于重现点击后的上下位移 |
 | [obsidian/openapi-completion.mjs](obsidian/openapi-completion.mjs) | 公开句柄、事务、冲突、卸载、迟到结果、CRLF、八种语言补全、自定义词表/规则及设置重载 |
+| [obsidian/fence-toolbar-reference.mjs](obsidian/fence-toolbar-reference.mjs) | 三/四反引号配对和撤销、完整正文及草稿复制、引用保存与失败保护、重复引用不写盘、原生块引用与嵌入、跳转保留阅读/实时预览/源码模式、文首块、已有目标标签页复用、改名排序和删除后的引用 |
 | 本目录中的 `*.test.mjs` | 无需启动 Obsidian 的解析、数据回写、围栏扫描和编辑器逻辑测试 |
 
-六组界面测试分别启动一个临时 Obsidian 进程，各组按用例切换阅读视图、实时预览、明暗主题和窗口宽度。这就是可见模式下会看到多种用例反复切换的原因。测试使用临时笔记，日常仓库中的内容不参与运行。
+七组界面测试分别启动一个临时 Obsidian 进程，各组按用例切换阅读视图、实时预览、明暗主题和窗口宽度。这就是可见模式下会看到多种用例反复切换的原因。测试使用临时笔记，日常仓库中的内容不参与运行。
 
 每组测试会打印 `Artifacts: .../code-tab-e2e-...`。该目录保留截图、`report.json`、`obsidian.log` 和测试仓库中的 Markdown；失败时另存 `failure.png`。对齐测试还会保存宽、窄窗口下标签组件的局部截图。
 
@@ -84,6 +87,9 @@ CODE_TAB_EXCALIDRAW_PLUGIN='/你的仓库/.obsidian/plugins/obsidian-excalidraw-
 | `code-tab-delete-cancel` | 取消删除按钮 |
 | `code-tab-completion-config` | 设置页补全 JSON 输入框 |
 | `code-tab-completion-config-save` | 校验并应用配置按钮 |
+| `code-tab-copy` | 复制当前标签完整内容 |
+| `code-tab-reference` | 生成并复制当前标签引用 |
+| `code-tab-edit` | 打开整个标签组的原生源码 |
 | `code-tab-fallback` | 原生编辑器不可用时的 textarea |
 
 例如，用 Playwright 定位当前可见的第一个标签组件：

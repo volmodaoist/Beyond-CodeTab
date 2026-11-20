@@ -2,11 +2,14 @@ import type { App, Component, Editor } from "obsidian";
 import type { EditorView } from "@codemirror/view";
 
 export interface TabData {
+  id?: string;
   title: string;
   content: string;
 }
 
 export interface TabBlock {
+  referenceId?: string;
+  referenceEnd?: number;
   start: number;
   end: number;
   line: number;

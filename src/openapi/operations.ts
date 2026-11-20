@@ -13,6 +13,17 @@ export function copyTab(tab: CodeTabData): CodeTabData {
   if (!tab.title.trim() || /[\r\n]/.test(tab.title)) {
     throw new CodeTabError(CodeTabErrorCode.InvalidOperation, "标签标题不能为空或包含换行");
   }
+  if (tab.id !== undefined) {
+    if (typeof tab.id !== "string" || !/^[a-zA-Z0-9-]+$/.test(tab.id)) {
+      throw new CodeTabError(CodeTabErrorCode.InvalidOperation, "无效的标签引用 ID");
+    }
+    const result: CodeTabData = {
+      id: tab.id,
+      title: tab.title,
+      content: tab.content,
+    };
+    return result;
+  }
   const result: CodeTabData = {
     title: tab.title,
     content: tab.content,
@@ -51,7 +62,13 @@ export function applyTabOperations(
       }
       case "replace-tab": {
         checkIndex(operation.index, tabs.length);
-        tabs[operation.index] = copyTab(operation.tab);
+        const replacement = copyTab(operation.tab);
+        const tab: CodeTabData = {
+          id: replacement.id ?? tabs[operation.index].id,
+          title: replacement.title,
+          content: replacement.content,
+        };
+        tabs[operation.index] = copyTab(tab);
         break;
       }
       case "remove-tab": {
@@ -78,6 +95,10 @@ export function applyTabOperations(
       default:
         throw new CodeTabError(CodeTabErrorCode.InvalidOperation, "不支持的标签操作");
     }
+  }
+  const ids = tabs.flatMap((tab) => (tab.id ? [tab.id] : []));
+  if (new Set(ids).size !== ids.length) {
+    throw new CodeTabError(CodeTabErrorCode.InvalidOperation, "标签引用 ID 不能重复");
   }
   const result: TabOperationResult = {
     tabs,

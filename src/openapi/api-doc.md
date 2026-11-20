@@ -1,6 +1,6 @@
 # Beyond-CodeTab API 使用说明
 
-统一 API 位于 `src/openapi/`。当前工作树已实现，尚未发布；没有 v1/v2 区分，旧的 `obsidian-codeblock-render` 事件已移除。
+统一 API 位于 `src/openapi/`。已合入当前 `main`，新增能力尚未发布新 tag；旧的 `obsidian-codeblock-render` 事件已移除。
 
 ## 1. 获取 API 与类型提示
 
@@ -29,12 +29,17 @@ API 不存在时返回 `null`，宿主可显示普通代码块。通过容器所
 ## 2. 渲染标签组
 
 ````ts
-import type { CodeTabRenderOptions } from "./code-tab-api";
+import type { CodeTabHandle, CodeTabRenderOptions } from "./code-tab-api";
 
-const api = getCodeTabApi(container);
-if (!api) {
-  return;
+async function renderTabBlock(options: CodeTabRenderOptions): Promise<CodeTabHandle | null> {
+  const api = getCodeTabApi(options.container);
+  if (!api) {
+    return null;
+  }
+  const handle: CodeTabHandle = await api.render(options);
+  return handle;
 }
+
 const options: CodeTabRenderOptions = {
   container,
   component: loadedParent,
@@ -45,8 +50,10 @@ const options: CodeTabRenderOptions = {
     await hostStore.commitBlock(blockId, expected, next);
   },
 };
-const handle = await api.render(options);
+const handle = await renderTabBlock(options);
 ````
+
+示例中的 `container`、`loadedParent`、`blockId` 与 `hostStore` 来自接入插件。后续示例假定已取得非空句柄；`null` 表示 API 不可用。
 
 `container` 是已挂入 DOM 的容器；`component` 是已加载的 Obsidian Component；`id` 是宿主块 ID。`source` 包含各 `tab:` 声明和正文，**不包含最外层 tab 围栏**。`sourcePath` 仅供相对链接和嵌入解析。
 
@@ -58,7 +65,7 @@ const handle = await api.render(options);
 
 | 接口                                  | 用途                                                    |
 | ------------------------------------- | ------------------------------------------------------- |
-| `api.parse(source)`                   | 把块体解析成 `{ title, content }[]` 的只读副本          |
+| `api.parse(source)`                   | 把块体解析成 `{ title, content, id? }[]` 的只读副本     |
 | `api.serialize(tabs)`                 | 标签数据转为块体；会规范化部分空白                      |
 | `handle.getSnapshot()`                | 读取已接受源码、revision、tabs、activeIndex 和状态      |
 | `handle.update(patch)`                | 同步宿主已确定的 source/sourcePath/readOnly，不触发保存 |
@@ -69,6 +76,8 @@ const handle = await api.render(options);
 | `handle.commit()` / `handle.cancel()` | 保存或取消当前正文草稿                                  |
 | `handle.subscribe(listener)`          | 立即及后续通知快照，返回取消订阅函数                    |
 | `handle.dispose()`                    | 释放组件并清空容器内容；重复调用安全                    |
+
+标签的可选 `id` 用于稳定引用，源码格式为 `tab: 标题 ^id`；改名与排序保留它，`replace-tab` 未提供新 ID 时保留原 ID。宿主 `update` 提供完整源码时，应保留标题行上的 ID。`options.id` 标识宿主实例，与标签 ID、笔记原生块 ID 是不同字段。
 
 快照状态包含 `readOnly`、`editing`、`saving`、`rendering`。`revision` 只随已接受源码变化增加，切页不增加；`source` 不包含未提交草稿。`editing` 指正文编辑，标题输入和删除确认也会使修改接口忙碌。
 
@@ -143,4 +152,4 @@ try {
 
 常见错误：`Busy` 正在交互、`RevisionMismatch` 快照已过期、`CommitFailed` 宿主未接受保存、`Disposed` 实例已释放。`RenderFailed` 可能发生在保存成功之后，先读快照再重试预览，避免重复记录撤销。
 
-完整契约见 [宿主渲染说明](../../docs/host-rendering.md)，导图迁移见 [交接指南](../../docs/mindmap-openapi-handoff.md)。
+完整契约见 [宿主渲染说明](../../docs/host-rendering.md)。

@@ -21,6 +21,10 @@ import { createTabDragController } from "./tabDragController";
 import type { TabMoveTarget } from "./tabDragController";
 import { createTabView, removeTabView, reorderTabViews, syncTabViews } from "./tabView";
 import type { TabView } from "./tabView";
+import { createTabToolbar } from "./tabToolbar";
+import type { TabToolbarOptions } from "./tabToolbar";
+import { createTabReference } from "./tabReferences";
+import { openTabSource } from "./tabSource";
 
 const EMPTY_CODE_BLOCK = "```text\n\n```";
 
@@ -110,11 +114,14 @@ export function renderTabGroup(
   element.appendChild(empty);
 
   const groupSuffix = safeId(group.id);
+  const header = element.ownerDocument.createElement("div");
+  header.className = "code-tab__header";
+  element.appendChild(header);
   const tabList = element.ownerDocument.createElement("div");
   tabList.className = "code-tab__list";
   tabList.setAttribute("data-testid", "code-tab-list");
   tabList.setAttribute("role", "tablist");
-  element.appendChild(tabList);
+  header.appendChild(tabList);
 
   const addButton = element.ownerDocument.createElement("button");
   addButton.className = "code-tab__add";
@@ -142,6 +149,107 @@ export function renderTabGroup(
   let cancelCurrentEditor: (() => Promise<void>) | null = null;
   let editorSession: TabEditor | null = null;
   let lastEditError: unknown;
+  let registeredController: TabGroupController | null = null;
+  const toolbarOptions: TabToolbarOptions = {
+    owner: component,
+    header,
+    onCopy: async () => {
+      try {
+        assertAlive();
+        const tab = tabs[activeIndex];
+        if (!tab) {
+          return;
+        }
+        const content = editorSession?.getValue() ?? tab.content;
+        const clipboard = element.ownerDocument.defaultView?.navigator.clipboard;
+        if (!clipboard) {
+          throw new Error("当前窗口无法访问剪贴板");
+        }
+        await clipboard.writeText(content);
+        new Notice("已复制当前标签完整内容");
+      } catch (error) {
+        new Notice(error instanceof Error ? error.message : "复制失败");
+      }
+    },
+    onReference: host
+      ? undefined
+      : async () => {
+          if (
+            disposed ||
+            readOnly ||
+            changingTabs ||
+            updating ||
+            interactions ||
+            writes ||
+            initializing
+          ) {
+            return;
+          }
+          changingTabs = true;
+          try {
+            if (saveCurrentEditor && !(await saveCurrentEditor())) {
+              return;
+            }
+            assertAlive();
+            const selected = activeIndex;
+            const reference = await createTabReference(
+              plugin.app,
+              sourcePath,
+              group.lineStart,
+              source,
+              selected,
+            );
+            if (!disposed) {
+              if (source !== reference.source) {
+                revision += 1;
+              }
+              source = reference.source;
+              tabs = parseTabs(source);
+              notify();
+            }
+            const clipboard = element.ownerDocument.defaultView?.navigator.clipboard;
+            if (!clipboard) {
+              throw new Error("当前窗口无法访问剪贴板");
+            }
+            await clipboard.writeText(reference.link);
+            new Notice("已复制当前标签引用");
+          } catch (error) {
+            new Notice(error instanceof Error ? error.message : "引用创建失败");
+          } finally {
+            changingTabs = false;
+            notify();
+          }
+        },
+    onEditSource: host
+      ? undefined
+      : async () => {
+          if (
+            disposed ||
+            readOnly ||
+            changingTabs ||
+            updating ||
+            writes ||
+            interactions ||
+            initializing
+          ) {
+            return;
+          }
+          changingTabs = true;
+          try {
+            if (saveCurrentEditor && !(await saveCurrentEditor())) {
+              return;
+            }
+            assertAlive();
+            await openTabSource(plugin.app, element, sourcePath, source, group.lineStart);
+          } catch (error) {
+            new Notice(error instanceof Error ? error.message : "无法打开标签组源码");
+          } finally {
+            changingTabs = false;
+            notify();
+          }
+        },
+  };
+  const toolbar = createTabToolbar(toolbarOptions);
   const hasTitleInput = () => !!tabList.querySelector(".code-tab__rename-input");
   component.register(dispose);
 
@@ -311,6 +419,9 @@ export function renderTabGroup(
               title: tab.title,
               content: tabIndex === index ? nextContent : tab.content,
             };
+            if (tab.id) {
+              nextTab.id = tab.id;
+            }
             return nextTab;
           });
           const nextSource = serializeSource(nextTabs);
@@ -356,6 +467,7 @@ export function renderTabGroup(
       click,
       initialSelection,
       addButton,
+      toolbar: toolbar.element,
       onSave: save,
       onCancel: cancel,
       completion: plugin.completion,
@@ -386,6 +498,9 @@ export function renderTabGroup(
           title,
           content: tabs[index].content,
         };
+        if (tabs[index].id) {
+          renamed.id = tabs[index].id;
+        }
         nextTabs[index] = renamed;
       }
       let nextIndex = activeIndex;
@@ -714,6 +829,9 @@ export function renderTabGroup(
         title: tab.title,
         content: tab.content,
       };
+      if (tab.id) {
+        copy.id = tab.id;
+      }
       return Object.freeze(copy);
     });
     const snapshot: CodeTabSnapshot = {
@@ -764,6 +882,13 @@ export function renderTabGroup(
   function syncEmptyState(): void {
     empty.hidden = tabs.length > 0;
     tabList.hidden = !tabs.length;
+    header.hidden = !tabs.length;
+    if (toolbar.edit) {
+      toolbar.edit.hidden = readOnly;
+    }
+    if (toolbar.reference) {
+      toolbar.reference.hidden = readOnly;
+    }
     panels.hidden = !tabs.length;
     if (readOnly) {
       addButton.remove();
@@ -844,6 +969,17 @@ export function renderTabGroup(
       return;
     }
     disposed = true;
+    const targets = plugin.referenceTargets?.get(group.id);
+    if (targets && registeredController) {
+      for (const target of targets) {
+        if (target === registeredController) {
+          targets.delete(target);
+        }
+      }
+      if (!targets.size) {
+        plugin.referenceTargets.delete(group.id);
+      }
+    }
     listeners.clear();
     if (editingIndex >= 0) {
       notifyEditing(false);
@@ -1041,5 +1177,11 @@ export function renderTabGroup(
     },
     dispose,
   };
+  if (!host) {
+    registeredController = controller;
+    const targets = plugin.referenceTargets.get(group.id) ?? new Set<TabGroupController>();
+    targets.add(controller);
+    plugin.referenceTargets.set(group.id, targets);
+  }
   return controller;
 }

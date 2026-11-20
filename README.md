@@ -1,68 +1,38 @@
 # Beyond-CodeTab
 
-在 Obsidian 笔记中使用 Markdown 创建可切换的标签页，并直接在阅读界面里编辑标签内容。
+在 Obsidian 中把 Markdown、代码、表格和嵌入组织成可切换的标签页。点击内容即可原地编辑，代码输入支持词表补全。
 
-项目主页：[volmodaoist/Beyond-CodeTab](https://github.com/volmodaoist/Beyond-CodeTab)。
-
-**Beyond-CodeTab** 由 [volmodaoist](https://github.com/volmodaoist) 开发和维护，基于 [lazyloong/obsidian-code-tab](https://github.com/lazyloong/obsidian-code-tab) 的 `2.0-alpha` 版本改造，重点解决两个体验问题：
-
-- 浏览时不为每个标签常驻一个完整 Markdown 编辑器，减少多余留白和复杂控件。
-- 编辑时按需使用 Obsidian 原生 Markdown 编辑器，代码正文与预览共用高亮规则。
-
-当前工作树已实现统一 [OpenAPI 使用说明](src/openapi/api-doc.md) 和 [独立代码补全 Core](docs/feat/code-completion-core.md)，尚未发布。导图插件接入见 [迁移交接指南](docs/mindmap-openapi-handoff.md)。
+项目：[volmodaoist/Beyond-CodeTab](https://github.com/volmodaoist/Beyond-CodeTab) · 作者：[volmodaoist](https://github.com/volmodaoist) · 许可证：[MIT](LICENSE)
 
 ## 功能特点
 
-- **可选宿主集成**：提供[宿主渲染接口](docs/host-rendering.md)，可将活动标签组挂入 MindMap Studio 等应用。宿主模式的编辑和标签管理由应用保存回调接管；只读模式保留切页。普通 Markdown 使用方式保持原样。
+- 标签新增、切换、拖动排序、双击改名和确认删除，结果保存到 Markdown。
+- 标签栏右侧可复制当前页完整内容、生成指定标签的跳转引用，并打开整个标签组的源码。
+- 支持普通 Markdown、代码块、表格、图片、笔记和第三方插件嵌入。
+- 阅读视图和实时预览中可原地编辑，编辑区域随正文增高和收缩。
+- 单代码块编辑保护围栏，预览与编辑使用一致的语法颜色。
+- 内置 Java、C、C++、Python、JavaScript、TypeScript、Go、Shell 词表补全，支持自定义词表和规则。
+- 可选 Excalidraw Frame Deck：单独嵌入的画布包含多个 Frame 时可逐页浏览，详见[说明](docs/feat/excalidraw-frame-deck.md)。
+- 提供 [OpenAPI](src/openapi/api-doc.md)，其他插件可嵌入标签组、同步内容并接管保存；补全 Core 可独立复制使用。
 
-- 支持 Java、C/C++、Python、JS/TS、Go、Shell 词表补全，允许通过设置页 JSON 或公开 API 添加词表和规则。
-- 支持任意数量的标签。
-- 标签栏末尾的 `+` 可直接新增并选中一个空代码标签。
-- 双击标签标题可原地重命名，Enter 或失焦保存，Esc 取消。
-- 右键标签选择“删除标签”，确认后删除该标签及内容。
-- 每个标签内可以放普通 Markdown、表格、列表、代码块及图片、笔记、Excalidraw 嵌入。
-- 单击内容区域即可原地编辑。
-- 编辑时使用 Obsidian 原生输入、选区和撤销；单代码块的着色与预览保持一致。
-- 点击编辑时保持卡片尺寸和正文位置；新增或删除行时，代码块随内容自然增高或收缩。
-- 标签只含一个完整代码块时直接编辑代码正文，围栏和语言标记保留在源文件中。
-- 编辑时右下角显示渲染类型输入框，支持 `markdown`、代码语言及已安装插件的处理器名称；退出编辑后隐藏。
-- 鼠标移出内容区域后自动保存。
-- `Ctrl/Cmd + Enter` 可以立即保存。
-- `Esc` 可以放弃本次修改。
-- 使用方向键、`Home` 和 `End` 切换获得焦点的标签。
-- 标签过多时支持横向滚动，但不显示突兀的滚动条。
-- 保存时保留源文件原有的 LF 或 CRLF 换行格式。
-- 预览时兼容 `c++`、`c#` 等编辑器与高亮器命名不一致的语言标记。
+## 安装与更新
 
-## 安装
+当前 `main` 已包含 OpenAPI、补全和 Beyond-CodeTab 品牌更新。`2.2.1` tag 是这些改动之前的稳定基线；要使用本文全部功能，请从当前 `main` 构建。版本演进见[演进记录](docs/evolution-history.md)。
 
-本仓库维护 TypeScript 源码。开发环境需要 Node.js 20 或更高版本；先在仓库根目录执行：
+构建需要 Node.js 20 或更高版本，在仓库根目录执行：
 
 ```bash
 npm ci
 npm run build
 ```
 
-构建产物位于 `dist/`，安装这些产物时不需要 Node.js。
+1. 在目标 Vault 中创建 `.obsidian/plugins/obsidian-code-tab/`。
+2. 将 `dist/main.js`、`dist/manifest.json`、`dist/styles.css` 复制进去。
+3. 在 Obsidian“设置 → 第三方插件”中启用 **Beyond-CodeTab**。更新已启用的插件后，关闭再启用，或重启 Obsidian。
 
-1. 在 Obsidian 仓库中创建目录：
+更新前先备份旧的三个安装文件。保留插件目录中的 `data.json`，以保留补全设置；每个 Vault 要分别安装和重新加载。
 
-   ```text
-   <你的仓库>/.obsidian/plugins/obsidian-code-tab/
-   ```
-2. 将 `dist/` 中的以下文件复制到该目录：
-
-   ```text
-   main.js
-   manifest.json
-   styles.css
-   ```
-3. 打开 Obsidian 的“设置 → 第三方插件”。
-4. 关闭并重新打开 Beyond-CodeTab，或者重启 Obsidian。
-
-显示名称为 `Beyond-CodeTab`，安装目录和插件 ID 使用 `obsidian-code-tab`，以延续已有安装、快捷键与补全设置。
-
-如果 Obsidian 尚未识别插件，可以先执行“重新加载插件”，再确认目录名和 `manifest.json` 中的 `id` 都是 `obsidian-code-tab`。
+显示名称是 `Beyond-CodeTab`，插件 ID 和安装目录仍为 `obsidian-code-tab`，用于延续原有安装与快捷键。构建还生成 `dist/code-tab-api.d.ts` 供接入开发使用，它不是插件运行所必需的安装文件。
 
 ## 快速开始
 
@@ -70,7 +40,7 @@ npm run build
 
 在 Markdown 中创建一个 `tab` fenced code block，并用 `tab: 标题` 分隔内容：
 
-`````markdown
+````markdown
 ```tab
 tab: 简介
 这里可以写普通 **Markdown**。
@@ -79,7 +49,7 @@ tab: 注意事项
 - 第一项
 - 第二项
 ```
-`````
+````
 
 渲染后会出现“简介”和“注意事项”两个标签。
 
@@ -87,7 +57,7 @@ tab: 注意事项
 
 内部代码块通常使用三个反引号，因此外层 `tab` 块需要使用四个反引号：
 
-``````markdown
+`````markdown
 ````tab
 tab: Python
 ```python
@@ -102,13 +72,15 @@ function greet(name) {
 }
 ```
 ````
-``````
+`````
 
-简单原则：外层 fence 必须比内部同类型 fence 更长。插件保存时也会自动检查这一点，必要时增加外层 fence 的长度。
+简单原则：外层 fence 必须比内部同类型 fence 更长。编辑已有围栏时，从三个反引号改为四个，或从四个缩回三个，会同步修改另一端；新输入或粘贴四反引号后回车，也能生成对应结束围栏。两端修改作为一次撤销操作。
+
+含有内层三个反引号代码块的 tab 组仍应使用四个或更多反引号；自动配对不会改变 Markdown 的嵌套规则。保存时也会按内层围栏长度保护外层结构。
 
 代码语言可以按日常习惯写成 `c++`。浏览态会在内存中将它映射为 Prism 能识别的 `cpp`，但不会修改笔记源文件：
 
-`````markdown
+````markdown
 ```c++
 #include <stdio.h>
 
@@ -116,7 +88,7 @@ int main() {
     return 0;
 }
 ```
-`````
+````
 
 ### 使用命令创建
 
@@ -132,24 +104,24 @@ Beyond-CodeTab: 创建标签组件
 
 1. 在阅读视图中选择需要修改的标签。
 2. 单击标签内容区域，进入原生 Markdown 编辑状态。
-3. 单代码块直接修改正文；Markdown 使用宿主实时预览，可直接修改表格单元格。右下角可选择渲染类型。
+3. 单代码块直接修改正文；Markdown 使用宿主实时预览，可直接修改表格单元格。右下角可选择渲染类型。右上角 `</>` 用于打开整个标签组的原生源码编辑，包括外层围栏和所有 `tab:` 声明。
 4. 将鼠标移出内容区域，插件会自动保存并恢复预览。
 
 快捷操作：
 
-| 操作                 | 结果                                                                 |
-| -------------------- | -------------------------------------------------------------------- |
-| 单击内容区域         | 进入编辑                                                             |
-| 标签栏末尾的 `+`   | 保存当前编辑，新增并选中一个空代码标签                               |
-| 拖动标签标题         | 调整标签相对位置，并同步写回 Markdown                                |
-| 双击标签标题         | 原地输入新名称；Enter / 失焦保存，Esc 取消                           |
-| 右键标签 → 删除标签 | 打开确认弹窗；确认后删除标签及正文                                   |
-| 编辑态右下角类型框   | 输入代码语言、`markdown` 或插件处理器名称；普通 `Enter` 回到正文 |
-| 鼠标移出内容区域     | 自动保存并返回预览                                                   |
-| `Ctrl/Cmd + Enter` | 立即保存并返回预览                                                   |
-| `Esc`              | 放弃本次修改并返回预览                                               |
-| `←` / `→`      | 在标签标题获得焦点时切换标签                                         |
-| `Home` / `End`   | 跳到第一个或最后一个标签                                             |
+| 操作                | 结果                                                             |
+| ------------------- | ---------------------------------------------------------------- |
+| 单击内容区域        | 进入编辑                                                         |
+| 标签栏末尾的 `+`    | 保存当前编辑，新增并选中一个空代码标签                           |
+| 拖动标签标题        | 调整标签相对位置，并同步写回 Markdown                            |
+| 双击标签标题        | 原地输入新名称；Enter / 失焦保存，Esc 取消                       |
+| 右键标签 → 删除标签 | 打开确认弹窗；确认后删除标签及正文                               |
+| 编辑态右下角类型框  | 输入代码语言、`markdown` 或插件处理器名称；普通 `Enter` 回到正文 |
+| 鼠标移出内容区域    | 自动保存并返回预览                                               |
+| `Ctrl/Cmd + Enter`  | 立即保存并返回预览                                               |
+| `Esc`               | 有候选窗口时先关闭候选；再次按下取消修改并返回预览               |
+| `←` / `→`           | 在标签标题获得焦点时切换标签                                     |
+| `Home` / `End`      | 跳到第一个或最后一个标签                                         |
 
 编辑过程中暂时不能切换到另一个标签。这是为了防止切换动作与异步文件保存发生竞争，造成当前编辑内容丢失。先让鼠标离开内容区域完成保存，再切换标签即可。
 
@@ -159,19 +131,19 @@ Beyond-CodeTab: 创建标签组件
 
 右下角输入框表示整个标签的**渲染类型**，不限定为编程语言：
 
-| 类型                                           | 保存后的显示方式                         |
-| ---------------------------------------------- | ---------------------------------------- |
-| `markdown` / `md`                          | 按 Markdown 渲染表格、段落、代码块和嵌入 |
+| 类型                                   | 保存后的显示方式                         |
+| -------------------------------------- | ---------------------------------------- |
+| `markdown` / `md`                      | 按 Markdown 渲染表格、段落、代码块和嵌入 |
 | `python`、`javascript`、`c++`、`c#` 等 | 按对应语言显示代码高亮                   |
-| `mermaid` 或已安装插件的处理器名             | 交给 Obsidian 注册的渲染器处理           |
-| 留空 /`text` / 未注册的类型                  | 显示纯文本代码块                         |
+| `mermaid` 或已安装插件的处理器名       | 交给 Obsidian 注册的渲染器处理           |
+| 留空 /`text` / 未注册的类型            | 显示纯文本代码块                         |
 
 类型名可自由输入，只排除会破坏围栏结构的空白、反引号和波浪号。代码语言输入后会更新编辑中的高亮；代码与 Markdown 的格式转换在保存时生效，保留正在使用的编辑器和撤销历史。`Esc` 同时放弃正文与类型修改。Markdown 标签切换为代码时，整个标签正文会被包入代码围栏。
 
 标签正文可以直接写 Markdown 表格，也兼容外包一层 `md` / `markdown` 围栏的写法。画布沿用 Obsidian 嵌入语法：
 
 `````markdown
-````tab
+```tab
 tab: 表格
 | 标识 | 说明 |
 | --- | --- |
@@ -179,64 +151,100 @@ tab: 表格
 
 tab: 画布
 ![[Drawing.excalidraw.md]]
-````
+```
 `````
 
 画布文件需存在于当前仓库，并启用 Excalidraw 插件。点击画布交给 Excalidraw 处理；点击面板周围的留白可以编辑嵌入链接。仅输入 `excalidraw` 不会自动创建画布或安装对应插件。
 
-进入编辑时，插件保留预览态的字号、行高、内边距、背景和 `4px` 圆角，正文位置与卡片尺寸保持一致。回车、粘贴或删除内容时，代码块像原生代码块一样自然增高或收缩；内容超出窗口时由笔记页面滚动，编辑器不产生内部纵向滚动条。取消修改后，预览恢复原来的尺寸。
+编辑区随内容自然增高和收缩，长内容由整页滚动。输入或页面滚动不会触发自动保存；主动移出内容区域、显式保存快捷键才会提交。鼠标移向补全候选窗口时仍保留当前编辑会话。
 
-输入引起的高度变化或页面滚动不会触发自动保存；只有主动将鼠标移到内容区域外才会保存并退出编辑。预览与编辑器交接时会短暂保留面板高度，初始化完成后立即释放，避免清空 DOM 的中间状态使整页滚动位置被裁短。
+单代码块的全选、退格和粘贴限制在正文内，保存保留围栏、语言和原有 LF/CRLF 换行。原生编辑器不可用时提供 textarea 降级编辑。
 
-单代码块编辑使用 CodeMirror 的替换装饰折叠围栏，文档本身保持完整，保存时保留语言与围栏。全选、跳到文首/文末和拖选都限制在可见正文内，边界退格或粘贴不会改写围栏；原生编辑器不可用时，降级输入框也保留相同的正文编辑方式。
+## 复制与标签引用
 
-代码正文的高亮共用 Obsidian 预览器已加载的 Prism 语法定义和主题样式，通过 CodeMirror 的 mark 装饰显示。这样不会因为两套分词器对 `print` 等符号的分类不同，导致点击前后颜色改变。输入、粘贴和撤销后会重新着色；单纯移动光标不会重新分词。
+右侧复制按钮复制当前标签的完整正文。代码会包含语言和代码围栏；正在编辑时复制当前草稿，不会因此保存笔记。混合 Markdown 标签会复制整页正文。
 
-原生 embed 自带的空标题、属性区和整页留白会被移除。预览和编辑使用相同的字号、行高及代码换行规则，避免窄窗口中长代码换行时产生额外首行。围栏保持行内折叠，保留空正文和末尾回车后的输入位置。
+引用按钮生成并复制一个 Markdown 链接，粘贴到其他笔记后可定位到这个 tab 组并选中对应标签。首次生成时，会在原文件中保存两个标识：
 
-## 工作原理
+- 组的原生块 ID：六位短 ID，放在外层结束围栏之后，如 `^a1b2c3`。
+- 标签的稳定 ID：组六位 ID 加标签六位 ID，直接写在标题行末尾，如 `tab: Python ^a1b2c3-d4e5f6`。界面只显示标题。
 
-```mermaid
-flowchart LR
-    A[tab fenced block] --> B[解析 tab 标题和正文]
-    B --> C[MarkdownRenderer 轻量预览]
-    C -->|单击内容| D[临时创建原生 Markdown editor]
-    D -->|鼠标离开或快捷键| E[定位原始 tab 块]
-    E --> F[vault.process 安全回写]
-    F --> G[销毁 editor 并恢复预览]
+改名、修改正文和排序会保留标签 ID。复制正文不包含这些标识；删除标签后，旧引用会提示目标不存在。正文编辑时点击引用或 `</>` 会先保存，保存失败会保留当前草稿。
+
+完整结构如下；外层组 ID 是原生块标识，内部标签 ID 由 Beyond-CodeTab 解析：
+
+````markdown
+```tab
+tab: Python ^a1b2c3-d4e5f6
+Python 标签正文
+
+tab: Shell ^a1b2c3-112233
+Shell 标签正文
+```
+^a1b2c3
+````
+
+例如，专用跳转链接的形式为：
+
+```markdown
+[Python](obsidian://beyond-code-tab?block=a1b2c3&tab=d4e5f6)
 ```
 
-### 为什么浏览态不用原生编辑器
+组 ID 同时能用于原生 `[[Example#^a1b2c3]]` 和 `![[Example#^a1b2c3]]`；原生链接定位或嵌入整个组，专用链接再选择具体标签。新组 ID 在当前 Vault 中检查重复，标签 ID 在组内检查重复。原生块 ID 只能使用英文字母、数字和连字符；代码块 ID 必须写在结束围栏外的独立一行。
 
-上游 `2.0-alpha` 会为每个标签创建一个完整的 Markdown embed。即使标签当前不可见，它的编辑器对象、DOM 和监听器仍然存在，而且 embed 自带整页布局、标题和控制按钮。标签较多时，这会让组件显得臃肿。
+专用链接只包含组和标签 ID，在当前 Vault 内查找，需要启用 Beyond-CodeTab。笔记移动、改名或 Vault 改名后无需重建链接。它是跳转链接，不是原生嵌入；复制到另一个 Vault 后，只有该 Vault 中也存在相应标签组时才能跳转。引用按钮用于笔记中的标签组；第三方宿主的存储与撤销继续由宿主接管。
 
-当前版本在浏览态只调用公开的 `MarkdownRenderer`。只有被点击的标签会创建一个编辑器，因此页面平时保持轻量。
+跳转保留目标笔记已有的阅读、实时预览或源码模式；目标已在其他标签页打开时，优先回到该标签页。实时预览继续显示标签组件，源码模式继续显示原始文本。目标尚未打开时，沿用承接跳转的笔记标签页模式。
 
-### 为什么编辑态仍然使用原生编辑器
+## 代码补全
 
-曾尝试过使用 `textarea` 加高亮镜像层模拟代码编辑：透明输入框负责输入，底层或上层代码节点负责颜色显示。这个方案很容易受到 Obsidian 主题、Electron/WebView 的层叠上下文和文本填充规则影响，实际出现过点击后内容完全不可见的问题。
+进入标签编辑后，输入关键词前缀自动显示候选；`Ctrl + Space` 可主动触发。补全只作用于代码块正文。单代码块使用右下角类型框指定语言，混合 Markdown 中每个代码块使用自己的围栏语言。
 
-因此当前版本在用户点击时调用 Obsidian 的 Markdown embed editor，光标、选区、撤销和输入法兼容由原生编辑器负责。单代码块通过原生编辑器的装饰 API 共用预览的 Prism 着色；混合 Markdown 内容继续使用宿主的 Markdown 编辑模式。
+| 语言       | 常见别名                     | 示例                |
+| ---------- | ---------------------------- | ------------------- |
+| Java       | `java`                       | `pub` → `public`    |
+| C          | `c`                          | `pri` → `printf`    |
+| C++        | `cpp`、`c++`、`cc`、`cxx`    | `vec` → `vector`    |
+| Python     | `python`、`python3`、`py`    | `enu` → `enumerate` |
+| JavaScript | `javascript`、`js`、`jsx`    | `con` → `const`     |
+| TypeScript | `typescript`、`ts`、`tsx`    | `key` → `keyof`     |
+| Go         | `go`、`golang`               | `def` → `defer`     |
+| Shell      | `shell`、`sh`、`bash`、`zsh` | `ech` → `echo`      |
 
-### 为什么使用私有 API
+### 添加自己的词表与规则
 
-Obsidian 的公开 API 可以渲染 Markdown，但目前没有提供一个等价的、可嵌入任意容器的完整 Markdown 编辑器接口。因此编辑态使用了：
+打开“设置 → Beyond-CodeTab”，把以下 JSON 填入“自定义代码补全”，点击“应用补全配置”：
 
-```javascript
-app.embedRegistry.getEmbedCreator({ extension: "md" })
+```json
+{
+  "wordLists": [
+    {
+      "id": "my-commands",
+      "languages": ["shell"],
+      "words": [
+        "deployLocal",
+        { "label": "greet", "insertText": "echo hello", "detail": "打印问候" }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "docker-commands",
+      "languages": ["shell"],
+      "match": "docker\\s+\\w*$",
+      "words": ["composeLocal"]
+    }
+  ]
+}
 ```
 
-`embedRegistry` 是私有 API，未来 Obsidian 升级后可能发生变化。插件已经准备了普通 `textarea` 降级路径：即使原生编辑器创建失败，内容仍然可见、可编辑、可保存。
+在 Shell 代码中输入 `depl` 可以选择 `deployLocal`；输入 `gre` 后选择 `greet`，实际插入 `echo hello`；输入 `docker co` 可以选择规则词条，得到 `docker composeLocal`。
 
-### 保存为什么要匹配旧内容
+每项需要唯一 `id`、适用 `languages` 和 `words`。`label` 用于显示与前缀匹配，`insertText` 可指定实际插入内容。规则的 `match` 匹配光标前的当前行，默认只替换正在输入的词。JSON 中的正则反斜杠需要写为 `\\`。
 
-一个笔记里可以有多个 `tab` 块，而且编辑期间源文件可能被另一个窗格或同步工具修改。插件保存时不会仅凭旧行号强行覆盖，而是：
+配置校验通过才保存并生效，重载插件后会恢复；无效配置保留原设置。清空自定义补全可应用 `{"wordLists": [], "rules": []}`，内置词表仍然可用。配置格式和函数规则见[补全 Core 文档](docs/feat/code-completion-core.md)。
 
-1. 在当前文件中查找内容与编辑前完全一致的 `tab` 块。
-2. 如果有多个匹配项，选择距离原始行号最近的一个。
-3. 如果一个都找不到，停止保存并提示刷新笔记。
-
-这是一种乐观并发保护，目标是宁可提示冲突，也不覆盖用户在其他位置完成的新修改。
+补全是离线词表与规则，不做类型推断、自动导入或 LSP 查询；C++ 成员名也是固定词表。未知语言默认没有内置候选，textarea 降级编辑暂不提供候选窗口。
 
 ## 语法约束
 
@@ -248,161 +256,38 @@ app.embedRegistry.getEmbedCreator({ extension: "md" })
 - 标签内容首尾的空行会被规整，正文内部空行保持不变。
 - 使用 `+` 新增标签，拖动标题调整顺序，双击标题重命名，右键确认删除。
 
-## 开发指南
+## 常见问题
 
-```text
-obsidian-code-tab/
-├── src/
-│   ├── main.ts                    # 插件注册、命令和标签选中状态
-│   ├── markdown.ts                # 标签解析、序列化和源文件回写
-│   ├── components/
-│   │   ├── MultiTab/             # 标签组件：标题、预览、Markdown 编辑和保存
-│   │   │   ├── index.ts          # 对外入口
-│   │   │   ├── tabGroup.ts       # 标签切换、新增及保存/取消协调
-│   │   │   ├── tabView.ts        # 标签 DOM、生命周期与 ARIA 状态同步
-│   │   │   ├── tabDragController.ts # 标签拖拽瞬时状态与落点判断
-│   │   │   ├── tabActions.ts     # 标题输入、右键菜单和删除确认
-│   │   │   ├── tabContent.ts     # 内容分类与 Markdown/代码格式转换
-│   │   │   ├── tabPreview.ts     # 宿主预览与语法加载
-│   │   │   ├── tabEditor.ts      # 临时 Markdown 编辑会话
-│   │   │   ├── renderTypeInput.ts # 渲染类型输入
-│   │   │   ├── types.ts          # 标签数据与原生 embed 类型
-│   │   │   ├── styles.css        # 标签外壳与预览面板样式
-│   │   │   └── editorStyles.css  # 原生编辑器与降级输入框样式
-│   │   └── CodeBlockEditor/      # 单代码块编辑能力
-│   │       ├── index.ts          # 对外入口
-│   │       ├── fences.ts         # 正文范围、围栏折叠与编辑边界
-│   │       ├── fencedCodeRanges.ts # 混合 Markdown 围栏区间扫描
-│   │       ├── highlighting.ts   # Prism 着色装饰
-│   │       ├── language.ts       # 类型名校验与围栏语言替换
-│   │       └── styles.css        # 代码预览和编辑的共享样式
-│   └── styles.css               # 汇总组件 CSS，由 esbuild 打包
-├── tests/
-│   ├── markdown.test.mjs          # 解析和文件回写回归测试
-│   ├── code-block-editor.test.mjs # 正文范围、围栏折叠和编辑边界回归测试
-│   ├── code-highlighting.test.mjs # token 范围、嵌套语法和输入后的着色更新
-│   ├── code-language.test.mjs     # 语言修改与围栏、正文保留
-│   ├── tab-content.test.mjs       # Markdown、代码及自定义类型的格式转换
-│   ├── fixtures/table.md          # 表格位移回归使用的中文样例
-│   └── obsidian/                 # 真实宿主的临时仓库、布局和输入回归测试
-├── esbuild.config.mjs             # 构建和监听模式
-├── manifest.json                  # 插件元数据
-├── package.json
-├── package-lock.json
-├── tsconfig.json
-├── README.md
-├── LICENSE                        # MIT License
-└── dist/                          # 构建产物，不提交到 Git
-    ├── main.js
-    ├── manifest.json
-    └── styles.css
-```
+**看不到标签页**：确认笔记使用 `tab` 围栏，标签声明单独占一行。标签内有三个反引号代码块时，外层使用四个反引号；阅读视图或实时预览才会显示组件，源码模式显示原始 Markdown。
 
-### 组件边界
+**更新后仍是旧名称或旧行为**：确认替换的是当前 Vault 的插件目录，然后关闭再启用插件。`npm run build` 和 `npm run dev` 只更新本仓库的 `dist/`，不会自动安装到 Vault。
 
-`MultiTab` 管标签栏、Markdown 预览、临时编辑会话和安全保存；`CodeBlockEditor` 管单代码块的围栏保护、Prism 着色和代码样式。表格与画布走 Markdown 能力，编辑会话留在 `MultiTab`，不会被混进纯代码组件。
+**补全没有出现**：先点击进入代码编辑，核对语言标记，再尝试 `Ctrl + Space`。`Esc` 在候选窗口打开时先关闭候选，下一次才取消编辑。
 
-这里按目录划分职责，不强制每个目录再包一层 class。`index.ts` 只导出实际使用的入口，内部函数直接互相调用；每个标签的 DOM、预览和监听器由一个 `TabView` 关联，删除时一起释放。`tabGroup.ts` 保留需要原子协调的编辑和保存流程，纯视图同步与拖拽状态分别交给小模块。组件 CSS 保留 `.code-tab` 前缀，通过根样式汇总，最终仍只产出一个 `dist/styles.css`。
+**保存提示内容冲突**：编辑期间源文件可能被其他窗格或同步工具改动。插件拒绝覆盖找不到原内容的块，保留草稿；先复制需要保留的内容，再取消并重新打开最新笔记进行编辑。
 
-### 核心术语与数据流
+移动设备缺少稳定的鼠标离开事件，可使用 `Ctrl/Cmd + Enter` 或源码模式保存。原生编辑器依赖 Obsidian 内部 API；第三方主题、插件组合和 Obsidian 大版本升级后需要重新验证。
 
-Beyond-CodeTab 使用外层 fenced code block 注册 `tab` 处理器，块内每条 `tab: 标题` 声明一个标签。标签正文仍是普通 Markdown，可以包含段落、表格、嵌入和内层代码块；内层代码围栏中的 `tab:` 不会被识别为新标签。
+## 开发与插件接入
 
-| 名称           | 职责                                                                   |
-| -------------- | ---------------------------------------------------------------------- |
-| `TabData`    | 保存一个标签的 `title` 和 Markdown `content`；数组顺序就是标签顺序 |
-| `TabContent` | 描述正文的原始文本、编辑文本、渲染类型和代码/Markdown 分类             |
-| `TabBlock`   | 记录整个外层 `tab` 块在文件中的位置、围栏、缩进和换行格式            |
-| `FenceLine`  | 解析单行围栏的字符、长度和附加信息，只在 Markdown 解析过程中使用       |
-| `TabView`    | 关联一个标签的按钮、面板、预览、着色信息和组件生命周期，不写入文件     |
+| 需求                                         | 文档                                                           |
+| -------------------------------------------- | -------------------------------------------------------------- |
+| 嵌入标签组、获取类型提示、操作数据与保存回调 | [简洁 API 文档](src/openapi/api-doc.md)                        |
+| 同步、冲突、只读与实例生命周期               | [宿主渲染契约](docs/host-rendering.md)                         |
+| 在其他编辑器使用补全                         | [可复制模块 README](src/core/completion/README.md)             |
+| 读源码、修改与本地调试                       | [插件开发入门](docs/tech/obsidian-plugin-development-guide.md) |
+| 查看完整文档与专题                           | [文档导航](docs/README.md)                                     |
 
-渲染数据流：
-
-```text
-外层 tab 块源码
-  → parseTabs()
-  → TabData[]
-  → readTabContent()
-  → MarkdownRenderer 或按需创建的原生编辑器
-```
-
-保存数据流：
-
-```text
-编辑结果
-  → writeTabContent()
-  → serializeTabs()
-  → findTabBlock()
-  → updateMarkdownSource()
-  → Vault 文件
-```
-
-维护这些转换时遵循以下约束：
-
-- `TabData` 回答“标签里有什么”，`TabBlock` 回答“整个标签块在文件哪里”，两者没有继承或一一对应关系。
-- `TabView`、活动索引和编辑状态只存在于内存；写入 Markdown 的只有标签标题和正文。
-- 文件偏移使用 JavaScript 字符串的 UTF-16 索引，替换范围为左闭右开的 `[start, end)`。
-- 内部统一使用 LF 解析，写回时恢复目标文件原有的 LF 或 CRLF 风格。
-- 保存前必须同时匹配旧源码；存在多个相同块时再按旧行号选择最近项，匹配失败则拒绝覆盖。
-- 解析会裁掉正文首尾空行，序列化会统一标签声明和标签间空行，因此往返转换不保证逐字节不变。
-
-### 常用开发命令
-
-以下命令均在仓库根目录执行，需要 Node.js 20 或更高版本：
-
-| 命令                      | 用途                                  | 运行结果                                                             |
-| ------------------------- | ------------------------------------- | -------------------------------------------------------------------- |
-| `npm ci`                | 首次开发或依赖锁文件更新后安装依赖    | 按 `package-lock.json` 安装到 `node_modules/`                    |
-| `npm run dev`           | 开发时持续监听源码、样式和清单变化    | 自动更新 `dist/`，按 `Ctrl + C` 停止                             |
-| `npm run typecheck`     | 单独检查 TypeScript 类型              | 在终端报告类型错误，不生成产物                                       |
-| `npm run lint`          | 检查 TypeScript/JavaScript 规则与格式 | 禁止单行分支、压缩函数体和单行对象属性                               |
-| `npm run lint:fix`      | 自动修复 lint 与格式问题              | 用 ESLint 和 Prettier 统一多行风格                                   |
-| `npm test`              | 运行解析和文件回写回归测试            | 在终端显示测试结果，不打开界面                                       |
-| `npm run test:obsidian` | 在本机 Obsidian 中自动运行交互回归    | 启动独立临时仓库，检查布局、输入及文件回写，输出截图和报告目录       |
-| `npm run build`         | 检查类型并生成插件安装文件            | 生成插件安装文件及 `dist/code-tab-api.d.ts` 类型声明 |
-
-首次开始开发：
+常用验证命令：
 
 ```bash
-npm ci
-npm run dev
+npm run lint
+npm test
+npm run build
+npm run test:obsidian
 ```
 
-完成修改后，在另一个终端运行以下命令；也可以先停止监听再执行：
-
-```bash
-npm run lint && npm test && npm run build
-```
-
-`npm ci` 会安装本地 pre-commit hook，每次 `git commit` 自动运行 `npm run lint`。不覆盖 Trae 的托管 hook；它会继续调用本仓库的检查。新增组件时把样式放在组件目录，并由根 `src/styles.css` 导入，监听模式会自动追踪这些导入。
-
-`npm run build` 已包含 TypeScript 类型检查，`npm run dev` 不做类型检查。构建与监听都只更新本仓库的 `dist/`，不会自动复制到 Obsidian 插件目录，也不会自动重新加载插件。
-
-本仓库从已在插件目录运行的本地 `2.2.1` 版本迁入，保留既有功能与样式，并恢复了 TypeScript 源码、构建脚本和回归测试。后续改动以 `src/` 为准，不直接编辑 `dist/main.js`。旧版新增、删除、重命名和拖拽组件已由当前实现替换；历史代码可通过 Git 查看。
-
-### 没有 Obsidian 时如何验证
-
-当前仓库没有独立的浏览器预览页面。`npm run dev` 只启动构建监听，不会启动 HTTP 服务、输出 `localhost` 预览地址或打开前端页面。`dist/main.js` 是由 Obsidian 加载的插件入口，运行时依赖 Obsidian 提供的 API，不能通过直接打开文件或执行 `node dist/main.js` 来预览。
-
-只安装 Node.js 时，可以运行 `npm run lint && npm test && npm run build`，验证以下内容：
-
-- TypeScript 类型正确，源码可以打包生成插件产物。
-- 标签解析、嵌套代码块、空标题和预览语言别名符合预期。
-- 在模拟的 Vault 文件接口中，保存能正确定位目标标签块、保留 LF/CRLF 换行，并在原内容已改变时拒绝覆盖。
-
-这些检查通过说明构建和已覆盖的逻辑符合预期。当前 `npm test` 不会启动真实 Obsidian、渲染界面或创建原生编辑器，因此不能据此确认主题外观、编辑器高亮、鼠标键盘交互和真实文件保存全部可用。
-
-如果需要在浏览器里预览样式和基础交互，需要另外开发预览页面，并模拟 Markdown 渲染、文件读写等 Obsidian 接口。浏览器预览也无法完整验证 Obsidian 私有的原生编辑器 API；本仓库目前尚未提供这种预览入口。
-
-### 在 Obsidian 中验证完整效果
-
-1. 在 Obsidian 中创建并打开一个专门用于开发测试的笔记仓库（Vault）。
-2. 执行 `npm run build`，将 `dist/` 中的三个文件复制到测试仓库的 `.obsidian/plugins/obsidian-code-tab/`。
-3. 在“设置 → 第三方插件”中启用 Beyond-CodeTab。
-4. 新建笔记，粘贴本文“快速开始”中的示例，在阅读视图中检查标签和编辑效果。
-5. 每次修改后，等待 `npm run dev` 完成构建，或重新执行 `npm run build`；再次复制产物，并关闭再启用插件，或重启 Obsidian。
-
-完整回归时按下方清单检查，并确认编辑后的内容已写入笔记源 Markdown。
+前三项可在没有 Obsidian 的机器上运行。最后一项需要本机安装 Obsidian，使用独立临时 Vault 验证真实编辑、布局和回写，详见[测试说明](tests/test-guide.md)。开发约定见 [AGENTS.md](AGENTS.md)。
 
 ## 分享与致谢
 

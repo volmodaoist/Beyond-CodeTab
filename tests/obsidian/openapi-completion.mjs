@@ -144,7 +144,10 @@ try {
       }
       if (
         !b.handle.getSnapshot().readOnly ||
-        b.container.querySelector('[data-testid="code-tab-add"]')
+        b.container.querySelector('[data-testid="code-tab-add"]') ||
+        b.container.querySelector('[data-testid="code-tab-edit"]') ||
+        !b.container.querySelector('[data-testid="code-tab-copy"]') ||
+        b.container.querySelector('[data-testid="code-tab-reference"]')
       ) {
         throw new Error("只读失效");
       }
@@ -222,13 +225,19 @@ try {
       await window.primary.handle.update({
         readOnly: true,
       });
-      if (window.primary.container.querySelector('[data-testid="code-tab-add"]')) {
+      if (
+        window.primary.container.querySelector('[data-testid="code-tab-add"]') ||
+        window.primary.container.querySelector('[data-testid="code-tab-edit"]')
+      ) {
         throw new Error("只读更新失效");
       }
       await window.primary.handle.update({
         readOnly: false,
       });
-      if (!window.primary.container.querySelector('[data-testid="code-tab-add"]')) {
+      if (
+        !window.primary.container.querySelector('[data-testid="code-tab-add"]') ||
+        window.primary.container.querySelector('[data-testid="code-tab-edit"]')
+      ) {
         throw new Error("编辑能力未恢复");
       }
       return window.primary.handle.getSnapshot();

@@ -1,5 +1,6 @@
 import {
   autocompletion,
+  acceptCompletion,
   closeCompletion,
   completionStatus,
   startCompletion,
@@ -9,8 +10,9 @@ import type {
   CompletionContext as EditorCompletionContext,
   CompletionResult as EditorCompletionResult,
 } from "@codemirror/autocomplete";
-import { ViewPlugin } from "@codemirror/view";
-import type { EditorView, ViewUpdate } from "@codemirror/view";
+import { keymap, ViewPlugin } from "@codemirror/view";
+import { Prec } from "@codemirror/state";
+import type { EditorView, KeyBinding, ViewUpdate } from "@codemirror/view";
 import type { Extension, TransactionSpec } from "@codemirror/state";
 import { CompletionError, normalizeCompletionLanguage } from "../../core/completion";
 import type { CompletionContext, CompletionEngine } from "../../core/completion";
@@ -20,7 +22,7 @@ import type { CodeRange } from "./fencedCodeRanges";
 
 let sequence = 0;
 
-/** 用正文范围隔离补全；保留原生 Markdown 解析和围栏保护。 */
+/** 代码补全限定正文；注册了 Markdown 规则时允许普通 Markdown 区域，仍保留围栏保护。 */
 export function codeCompletionExtensions(
   engine: CompletionEngine,
   languageOverride?: () => string,
@@ -39,7 +41,21 @@ export function codeCompletionExtensions(
       };
       return range;
     }
-    return findFencedCodeRanges(text).find((range) => offset >= range.from && offset <= range.to);
+    const code = findFencedCodeRanges(text).find(
+      (range) => offset >= range.from && offset <= range.to,
+    );
+    if (code) {
+      return code;
+    }
+    if (!engine.list().some((entry) => entry.languages.includes("markdown"))) {
+      return undefined;
+    }
+    const range: CodeRange = {
+      from: 0,
+      to: text.length,
+      language: "markdown",
+    };
+    return range;
   };
   const session = ViewPlugin.fromClass(
     class {
@@ -180,6 +196,8 @@ export function codeCompletionExtensions(
       const result: EditorCompletionResult = {
         from: range.from + Math.min(...candidates.items.map((item) => item.from)),
         options,
+        // Markdown 规则可替换 [[ 等非单词前缀；匹配已由公开补全引擎处理。
+        filter: range.language === "markdown" ? false : undefined,
       };
       return result;
     } catch (error) {
@@ -195,7 +213,17 @@ export function codeCompletionExtensions(
     closeOnBlur: false,
     tooltipClass: () => "code-tab__completion-tooltip " + token,
   };
-  return [session, autocompletion(config)];
+  const markdownKey: KeyBinding = {
+    key: "Tab",
+    run: (view) => {
+      const range = locate(view.state.doc.toString(), view.state.selection.main.head);
+      return range?.language === "markdown" && completionStatus(view.state) === "active"
+        ? acceptCompletion(view)
+        : false;
+    },
+  };
+  const markdownKeys = keymap.of([markdownKey]);
+  return [session, autocompletion(config), Prec.high(markdownKeys)];
 }
 
 export function isCodeCompletionInteraction(view: EditorView, target: EventTarget | null): boolean {
