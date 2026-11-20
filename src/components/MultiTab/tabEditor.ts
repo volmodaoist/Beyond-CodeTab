@@ -1,8 +1,8 @@
 import { Component } from "obsidian";
 import type { App } from "obsidian";
-import { Compartment, EditorSelection, StateEffect } from "@codemirror/state";
+import { Compartment, EditorSelection, Prec, StateEffect } from "@codemirror/state";
 import type { Extension, TransactionSpec } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import { EditorView, tooltips } from "@codemirror/view";
 import { closeCompletion, completionStatus } from "@codemirror/autocomplete";
 import type {
   AppWithEmbedRegistry,
@@ -225,7 +225,15 @@ export class TabEditor extends Component {
       };
       return attributes;
     };
-    const extensions: Extension[] = [EditorView.editorAttributes.of(editorAttributes)];
+    // 卡片保留圆角裁切，弹层挂到所属窗口的 body，避免候选被卡片边界遮挡。
+    const tooltipOptions: NonNullable<Parameters<typeof tooltips>[0]> = {
+      parent: view.dom.ownerDocument.body,
+      position: "fixed",
+    };
+    const extensions: Extension[] = [
+      EditorView.editorAttributes.of(editorAttributes),
+      Prec.high(tooltips(tooltipOptions)),
+    ];
     if (this.content.kind === "markdown") {
       extensions.push(fencePairingExtension());
     }

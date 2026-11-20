@@ -1,0 +1,22 @@
+name: Feature request / 功能建议
+description: Suggest an improvement to code and Markdown tabs or plugin integration.
+title: "[Feature] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Use case / 使用场景
+      description: Describe the task you are trying to complete.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior / 期望行为
+      description: Explain the interaction or API you would like, with an example if possible.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Current workaround / 当前替代方式

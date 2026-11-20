@@ -74,7 +74,8 @@ try {
       bottom: "20px",
       overflow: "auto",
       background: "var(--background-primary)",
-      zIndex: "500",
+      // 测试宿主使用 Obsidian 的模态层级，给 body 中的原生补全浮层保留显示空间。
+      zIndex: "var(--layer-modal, 50)",
     });
     document.body.appendChild(area);
     window.apiFixtures = [];

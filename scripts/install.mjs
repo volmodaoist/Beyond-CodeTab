@@ -25,9 +25,11 @@ make build                   类型检查并构建到 dist/
 make dev                     监听源码变化并构建
 make test                    运行核心测试
 make test-obsidian            构建并运行真实 Obsidian 回归
+make demos                   录制真实 Obsidian GIF 演示（需要 FFmpeg）
+make docs-check              检查文档链接、目录锚点和 GIF 文件
 make lint                    检查代码规则与格式
 make lint-fix                自动修复代码风格
-make check                   运行测试、构建和 lint
+make check                   运行测试、构建、lint 和文档检查
 
 make install vault="/path/to/vault"  构建并安装到指定 Vault
 

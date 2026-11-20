@@ -1,6 +1,6 @@
 # Obsidian 插件开发入门
 
-本文按当前 Beyond-CodeTab 源码说明开发流程。派生版本由 **volmodaoist** 开发和维护，上游来源与 MIT 许可证说明见 [README](../../README.md#分享与致谢)。
+本文按当前 Beyond-CodeTab 源码说明开发流程。派生版本由 **volmodaoist** 开发和维护，上游来源与 MIT 许可证说明见 [README](../../README.md#credits)。
 
 ## 1. 插件开发的基本原理
 
@@ -168,7 +168,7 @@ export interface TabData {
 }
 ```
 
-解析器按标签分组扫描。遇到内部代码围栏时，先越过整个代码块，再继续寻找下一条标签声明。因此，只有在围栏外，形如 `tab: 标题` 的声明行才会开启新标签。每收集完一组，就构造一个 `TabData` 并加入数组；核心类型和完整数据流见 README 的[核心术语与数据流](../../README.md#核心术语与数据流)。
+解析器按标签分组扫描。遇到内部代码围栏时，先越过整个代码块，再继续寻找下一条标签声明。因此，只有在围栏外，形如 `tab: 标题` 的声明行才会开启新标签。每收集完一组，就构造一个 `TabData` 并加入数组；核心类型和两条数据路径见[宿主渲染契约](../host-rendering.md#两条数据路径)。
 
 例如下面的 `tab: 这是一行代码` 会保留在第一个标签的正文里：
 
@@ -481,7 +481,7 @@ npm run lint && npm test && npm run build
 npm run test:obsidian
 ```
 
-它会先构建，再启动七组真实宿主回归，覆盖代码编辑、标签控件、Markdown 与嵌入、表格逐帧切换、标签改名和删除，以及公开 API、补全、设置恢复、围栏配对和稳定标签引用。每组使用独立临时 Vault，默认隐藏测试窗口，结束时关闭测试进程，保留截图、日志和 `report.json`。运行命令及可选 Excalidraw 配置见 [tests/test-guide.md](../../tests/test-guide.md)。
+它会先构建，再启动八组真实宿主回归，覆盖代码编辑、标签控件、Markdown 与嵌入、表格逐帧切换、标签改名和删除，以及公开 API、补全、设置恢复、围栏配对和稳定标签引用。每组使用独立临时 Vault，默认隐藏测试窗口，结束时关闭测试进程，保留截图、日志和 `report.json`。运行命令及可选 Excalidraw 配置见 [tests/test-guide.md](../../tests/test-guide.md)。
 
 自动化定位使用 `data-testid`，例如先选中可见的 `code-tab-group`，再查找其内部的 `code-tab-tab`、`code-tab-panel`、`code-tab-language`。同页可以有多个标签组，所以不要将这些值当作全局唯一 DOM ID。
 

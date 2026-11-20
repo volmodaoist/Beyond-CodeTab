@@ -1,0 +1,30 @@
+name: Bug report / 问题反馈
+description: Report a reproducible issue with tabs, editing, completion, or references.
+title: "[Bug] "
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment / 使用环境
+      description: Plugin version or commit, Obsidian version, OS, theme, and view mode.
+      placeholder: "Beyond-CodeTab: ...\nObsidian: ...\nOS and theme: ...\nReading / Live Preview / Source: ..."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / 复现步骤
+      description: Include the expected and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: markdown
+    attributes:
+      label: Minimal Markdown example / 最小 Markdown 示例
+      description: Remove private note content and paths.
+      render: markdown
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots, GIFs, or console errors / 截图与错误
+      description: Attach relevant evidence without credentials or private content.

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help deps build dev test test-obsidian lint lint-fix check install
+.PHONY: help deps build dev test test-obsidian demos docs-check lint lint-fix check install
 
 # 原样导出路径，避免将空格或特殊字符插入 shell 命令。
 export CODE_TAB_VAULT := $(value vault)
@@ -22,6 +22,12 @@ test:
 test-obsidian:
 	npm run test:obsidian
 
+demos:
+	npm run demo:record
+
+docs-check:
+	npm run docs:check
+
 lint:
 	npm run lint
 
@@ -32,6 +38,7 @@ check:
 	npm test
 	npm run build
 	npm run lint
+	npm run docs:check
 
 install:
 	node scripts/install.mjs

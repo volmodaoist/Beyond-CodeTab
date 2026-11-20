@@ -4,7 +4,11 @@
 
 ## 使用插件
 
-先读 [README](../README.md)：从源码安装、四反引号嵌套代码块、编辑快捷键、标签管理、自定义补全和常见问题。
+使用说明：[中文](../README.md) · [English](../READMEs/README.en.md) · [日本語](../READMEs/README.ja.md) · [한국어](../READMEs/README.ko.md)。涵盖安装、GIF 演示、四反引号嵌套代码块、编辑快捷键、标签管理、自定义补全和常见问题。
+
+- [演示与录制说明](assets/demos/README.md)：真实 Obsidian GIF 和可复现的录制入口。
+- [社区与检索](community.md)：GitHub topics、项目描述、问题反馈及官方社区收录。
+- [贡献指南](../CONTRIBUTING.md)：提交问题、开发和验证。
 
 ## 接入或复用
 
@@ -23,7 +27,7 @@ OpenAPI 是插件之间的本地 TypeScript/DOM 接口，没有 HTTP 服务。�
 
 - [Obsidian 插件开发入门](tech/obsidian-plugin-development-guide.md)：加载、渲染、编辑、保存、组件生命周期和本地调试。
 - [Obsidian 扩展点与官方 API 导览](tech/obsidian-extension-points-and-api.md)：按任务查找宿主能力。
-- [测试说明](../tests/test-guide.md)：核心检查、七组真实 Obsidian 回归、产物与定位标识。
+- [测试说明](../tests/test-guide.md)：核心检查、八组真实 Obsidian 回归、产物与定位标识。
 - [演进记录](evolution-history.md)：版本基线、重要改动和来源。
 - [代码约定](../AGENTS.md)：风格、验证、提交说明与发布要求。
 

@@ -1,7 +1,7 @@
 {
   "id": "obsidian-code-tab",
   "name": "Beyond-CodeTab",
-  "description": "Editable Markdown tabs with code completion and a public API.",
+  "description": "Editable code and Markdown tabs with offline autocomplete and links to individual tabs.",
   "author": "volmodaoist",
   "minAppVersion": "0.11.0",
   "version": "2.2.1",
